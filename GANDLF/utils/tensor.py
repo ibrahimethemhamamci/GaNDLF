@@ -100,9 +100,7 @@ def reverse_one_hot(predmask_array, class_list):
             # class_list = "[0,1||2]"
             # output_classes = [0,1]
             # this would make "1||2" be mapped to "1", and this mechanism can be extended for N possible combinations
-            final_mask += np.asarray(
-                predmask_array[i, ...], dtype=int
-            )
+            final_mask += np.asarray(predmask_array[i, ...], dtype=int)
     else:
         for idx, _class in enumerate(class_list):
             final_mask = final_mask + (idx_argmax == idx) * _class
@@ -226,19 +224,19 @@ def get_class_imbalance_weights(training_data_loader, parameters):
             # accumulate dice weights for each label
             try:
                 style_to_style = parameters["style_to_style"]
-                if style_to_style==False:
-                    style=False
+                if style_to_style == False:
+                    style = False
                 else:
-                    style=True
+                    style = True
             except:
-                style=True
-            if style==True:
-                
+                style = True
+            if style == True:
+
                 mask = subject["label"][torchio.DATA]
             else:
-                mask=subject["label"][torchio.DATA]
+                mask = subject["label"][torchio.DATA]
             one_hot_mask = one_hot(mask, parameters["model"]["class_list"])
-                
+
             for i in range(0, len(parameters["model"]["class_list"])):
                 currentNumber = torch.nonzero(
                     one_hot_mask[:, i, ...], as_tuple=False
@@ -247,8 +245,7 @@ def get_class_imbalance_weights(training_data_loader, parameters):
                 abs_dict[i] += currentNumber
                 # total number of non-zero voxels to be considered
                 total_counter += currentNumber
-        
-       
+
         # for classification, the value needs to be used directly
         elif parameters["problem_type"] == "classification":
             # accumulate weights for each label

@@ -249,7 +249,7 @@ def TrainingManager(dataframe, outputDir, parameters, device, reset_prev):
 
                 command = (
                     parallel_compute_command_actual
-                    + " -m GANDLF.training_loop -train_loader_pickle " # todo: make appropriate change for GAN
+                    + " -m GANDLF.training_loop -train_loader_pickle "  # todo: make appropriate change for GAN
                     + currentTrainingDataPickle
                     + " -val_loader_pickle "
                     + currentValidationDataPickle
@@ -304,7 +304,7 @@ def TrainingManager_split(
             flush=True,
         )
         parameters = pickle.load(open(currentModelConfigPickle, "rb"))
-    
+
     if is_GAN(parameters["model"]["architecture"]):  # gan mode
         training_function = training_loop_GAN
     else:

@@ -64,12 +64,12 @@ def ImagesFromDataFrame(dataframe, parameters, train):
     enable_padding = parameters["enable_padding"]
     try:
         style_to_style = parameters["style_to_style"]
-        if style_to_style==False:
-            style=False
+        if style_to_style == False:
+            style = False
         else:
-            style=True
+            style = True
     except:
-        style=True
+        style = True
 
     # Finding the dimension of the dataframe for computational purposes later
     num_row, num_col = dataframe.shape
@@ -139,7 +139,7 @@ def ImagesFromDataFrame(dataframe, parameters, train):
         #     # get the mask
         #     if (subject_dict['label'] is None) and (class_list is not None):
         #         sys.exit('The \'class_list\' parameter has been defined but a label file is not present for patient: ', patient)
-        if labelHeader is not None and style == True :
+        if labelHeader is not None and style == True:
             if not os.path.isfile(str(dataframe[labelHeader][patient])):
                 skip_subject = True
 
@@ -158,10 +158,15 @@ def ImagesFromDataFrame(dataframe, parameters, train):
 
             # for the weird cases where mask is read as an RGB image, ensure only the first channel is used
         if subject_dict["label"]["data"].shape[0] == 3:
-            subject_dict["label"]["data"] = subject_dict["label"]["data"][0].unsqueeze(0)
-                # this warning should only come up once
+            subject_dict["label"]["data"] = subject_dict["label"]["data"][0].unsqueeze(
+                0
+            )
+            # this warning should only come up once
             if parameters["print_rgb_label_warning"]:
-                print("WARNING: The label image is an RGB image, only the first channel will be used.", flush=True)
+                print(
+                    "WARNING: The label image is an RGB image, only the first channel will be used.",
+                    flush=True,
+                )
                 parameters["print_rgb_label_warning"] = False
 
             # if resize is requested, the perform per-image resize with appropriate interpolator
@@ -169,7 +174,6 @@ def ImagesFromDataFrame(dataframe, parameters, train):
             img = sitk.ReadImage(str(dataframe[labelHeader][patient]))
             img_resized = resize_image(img, preprocessing["resize"])
             subject_dict["label"] = torchio.LabelMap.from_sitk(img_resized)
-
 
         # iterating through the values to predict of the subject
         valueCounter = 0

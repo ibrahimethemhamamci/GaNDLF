@@ -465,6 +465,7 @@ def training_loop_GAN(model, train_dataloader, optimizer, params):
     # put GAN-related training here
     test = 1
 
+
 if __name__ == "__main__":
 
     import argparse, pickle, pandas
