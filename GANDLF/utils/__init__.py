@@ -33,9 +33,10 @@ from .generic import (
     get_date_time,
     get_filename_extension_sanitized,
     version_check,
+    is_GAN,
 )
 
 from .modelio import (
     load_model,
     save_model,
-)s
+)
