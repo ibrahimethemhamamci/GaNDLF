@@ -1,8 +1,10 @@
-from GANDLF.compute import inference_loop
 import os
 import numpy as np
 import torch
 import torch.nn.functional as F
+
+from GANDLF.compute import inference_loop, inference_loop_GAN
+from GANDLF.utils import is_GAN
 
 
 def InferenceManager(dataframe, outputDir, parameters, device):
@@ -11,6 +13,11 @@ def InferenceManager(dataframe, outputDir, parameters, device):
     """
     # get the indeces for kfold splitting
     inferenceData_full = dataframe
+
+    if is_GAN(parameters["model"]["architecture"]):  # gan mode
+        inference_function = inference_loop_GAN
+    else:
+        inference_function = inference_loop
 
     # # initialize parameters for inference
     if not ("weights" in parameters):
@@ -39,7 +46,7 @@ def InferenceManager(dataframe, outputDir, parameters, device):
 
     for fold_dir in fold_dirs:
         parameters["current_fold_dir"] = fold_dir
-        inference_loop(
+        inference_function(
             inferenceDataFromPickle=inferenceData_full,
             outputDir=fold_dir,
             device=device,

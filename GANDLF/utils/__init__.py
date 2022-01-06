@@ -7,6 +7,7 @@ from .imaging import (
     resample_image,
     resize_image,
     perform_sanity_check_on_subject,
+    write_training_patches,
 )
 
 from .tensor import (
@@ -33,9 +34,10 @@ from .generic import (
     get_date_time,
     get_filename_extension_sanitized,
     version_check,
+    is_GAN,
 )
 
 from .modelio import (
     load_model,
     save_model,
-)s
+)

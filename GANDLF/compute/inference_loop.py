@@ -173,6 +173,12 @@ def inference_loop(inferenceDataFromPickle, device, parameters, outputDir):
             )
 
 
+def inference_loop_GAN(inferenceDataFromPickle, device, parameters, outputDir):
+    # keep same interface as inference_loop for consistency; add extra parameters using kwargs
+    # put GAN-related inference here
+    test = 1
+
+
 if __name__ == "__main__":
 
     # parse the cli arguments here

@@ -2,6 +2,7 @@ import os, time, psutil
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import numpy as np
 import torchio
 from medcam import medcam
 
@@ -19,6 +20,7 @@ from GANDLF.utils import (
     save_model,
     load_model,
     version_check,
+    write_training_patches,
 )
 from GANDLF.logger import Logger
 from .step import step
@@ -60,7 +62,10 @@ def train_network(model, train_dataloader, optimizer, params):
     average_epoch_train_metric = {}
 
     for metric in params["metrics"]:
-        total_epoch_train_metric[metric] = 0
+        if "per_label" in metric:
+            total_epoch_train_metric[metric] = []
+        else:
+            total_epoch_train_metric[metric] = 0
 
     # automatic mixed precision - https://pytorch.org/docs/stable/amp.html
     if params["model"]["amp"]:
@@ -90,6 +95,12 @@ def train_network(model, train_dataloader, optimizer, params):
         else:
             label = subject["label"][torchio.DATA]
         label = label.to(params["device"])
+
+        if params["save_training"]:
+            write_training_patches(
+                subject,
+                params,
+            )
 
         # ensure spacing is always present in params and is always subject-specific
         if "spacing" in subject:
@@ -132,7 +143,10 @@ def train_network(model, train_dataloader, optimizer, params):
         if not nan_loss:
             total_epoch_train_loss += loss.detach().cpu().item()
         for metric in calculated_metrics.keys():
-            total_epoch_train_metric[metric] += calculated_metrics[metric]
+            if isinstance(total_epoch_train_metric[metric], list):
+                total_epoch_train_metric[metric].append(calculated_metrics[metric])
+            else:
+                total_epoch_train_metric[metric] += calculated_metrics[metric]
 
         # For printing information at halftime during an epoch
         if ((batch_idx + 1) % (len(train_dataloader) / 2) == 0) and (
@@ -143,17 +157,27 @@ def train_network(model, train_dataloader, optimizer, params):
                 total_epoch_train_loss / (batch_idx + 1),
             )
             for metric in params["metrics"]:
+                if isinstance(total_epoch_train_metric[metric], list):
+                    to_print = (
+                        np.array(total_epoch_train_metric[metric]) / (batch_idx + 1)
+                    ).tolist()
+                else:
+                    to_print = total_epoch_train_metric[metric] / (batch_idx + 1)
                 print(
                     "Half-Epoch Average Train " + metric + " : ",
-                    total_epoch_train_metric[metric] / (batch_idx + 1),
+                    to_print,
                 )
 
     average_epoch_train_loss = total_epoch_train_loss / len(train_dataloader)
     print("     Epoch Final   Train loss : ", average_epoch_train_loss)
     for metric in params["metrics"]:
-        average_epoch_train_metric[metric] = total_epoch_train_metric[metric] / len(
-            train_dataloader
-        )
+        if isinstance(total_epoch_train_metric[metric], list):
+            to_print = (
+                np.array(total_epoch_train_metric[metric]) / len(train_dataloader)
+            ).tolist()
+        else:
+            to_print = total_epoch_train_metric[metric] / len(train_dataloader)
+        average_epoch_train_metric[metric] = to_print
         print(
             "     Epoch Final   Train " + metric + " : ",
             average_epoch_train_metric[metric],
@@ -396,6 +420,8 @@ def training_loop(
         if params["verbose"]:
             print("Epoch start time : ", get_date_time())
 
+        params["current_epoch"] = epoch
+
         epoch_train_loss, epoch_train_metric = train_network(
             model, train_dataloader, optimizer, params
         )
@@ -458,6 +484,12 @@ def training_loop(
         " mins",
         flush=True,
     )
+
+
+def training_loop_GAN(model, train_dataloader, optimizer, params):
+    # keep same interface as training_loop for consistency; add extra parameters using kwargs
+    # put GAN-related training here
+    test = 1
 
 
 if __name__ == "__main__":

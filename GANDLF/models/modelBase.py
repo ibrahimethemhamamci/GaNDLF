@@ -73,7 +73,7 @@ class ModelBase(nn.Module):
 
         # based on dimensionality, the following need to defined:
         # convolution, batch_norm, instancenorm, dropout
-   
+
         if self.n_dimensions == 2:
             self.Conv = nn.Conv2d
             self.ConvTranspose = nn.ConvTranspose2d
@@ -99,4 +99,3 @@ class ModelBase(nn.Module):
             self.AdaptiveMaxPool = nn.AdaptiveMaxPool3d
             self.Norm = get_norm_type(self.norm_type.lower(), self.n_dimensions)
             self.ReflectionPad = nn.ReflectionPad3d
-
