@@ -39,11 +39,12 @@ def step(model_main, image, label, params):
     # for the weird cases where mask is read as an RGB image, ensure only the first channel is used
     if params["problem_type"] == "segmentation":
         if label.shape[1] == 3:
-            label = label[:, 0, ...].unsqueeze(1)
+            #label = label[:, 0, ...].unsqueeze(1)
+            #Not necessary for GANs
             # this warning should only come up once
             if params["print_rgb_label_warning"]:
                 print(
-                    "WARNING: The label image is an RGB image, only the first channel will be used.",
+                    "WARNING: The output image is an RGB image.",
                     flush=True,
                 )
                 params["print_rgb_label_warning"] = False
@@ -53,12 +54,10 @@ def step(model_main, image, label, params):
 
     if params["model"]["dimension"] == 2:
         image = torch.squeeze(image, -1)
-        if "value_keys" in params:
-            if len(label.shape) > 1:
-                label = torch.squeeze(label, -1)
+        label = torch.squeeze(label, -1)
+    
     try:
         style_to_style = params["style_to_style"]
-        print(style_to_style)
         if style_to_style==False:
             style=False
         else:
@@ -68,7 +67,8 @@ def step(model_main, image, label, params):
     if style == False:
         image = torch.zeros(image.shape[0], params["latent_dim"]).normal_(0, 1)
     else:
-        image,label=model_main.preprocess(image,label)    
+        image,label=model_main.preprocess(image,label)
+
     model=model_main.return_generator()
     #image=image/255.0
     #label=label.float()
@@ -79,10 +79,9 @@ def step(model_main, image, label, params):
             output = model(image)
     else:
         output = model(image)
-
     if "medcam_enabled" in params and params["medcam_enabled"]:
         output, attention_map = output
-
+  
     # one-hot encoding of 'label' will probably be needed for segmentation
     loss, metric_output = get_loss_and_metrics(image, label, output, params)
 
@@ -93,7 +92,7 @@ def step(model_main, image, label, params):
         output = torch.unsqueeze(output, -1)
         if "medcam_enabled" in params and params["medcam_enabled"]:
             attention_map = torch.unsqueeze(attention_map, -1)
-
+    
     if not ("medcam_enabled" in params and params["medcam_enabled"]):
         return loss, metric_output, output
     else:

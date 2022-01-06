@@ -1,5 +1,5 @@
 import torch
-from .modelBase_GAN import ModelBase
+from .modelBase import ModelBase
 from . import networks
 from GANDLF.utils import send_model_to_device
 from GANDLF.schedulers import global_schedulers_dict
@@ -41,7 +41,6 @@ class pix2pix(ModelBase):
         self.optimizer_list=[self.optimizer_G,self.optimizer_D]
         self.lambda_L1= parameters["model"]["lambda"]
         print("LAMBDA:",self.lambda_L1)
-        print(self.optimizer_D==self.optimizer_G)
         
         # Here 2 different optimizer can be defined if necessary.
         #for i in range(len(self.model_names)):

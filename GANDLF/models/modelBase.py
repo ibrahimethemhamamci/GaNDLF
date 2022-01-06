@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
+from . import networks
+from GANDLF.utils import get_linear_interpolation_mode
 
 
 def get_final_layer(final_convolution_layer):
@@ -59,6 +61,38 @@ class ModelBase(nn.Module):
         """
         super(ModelBase, self).__init__()
         self.model_name = parameters["model"]["architecture"]
+        
+        gan_model_names_list = [
+            "sdnet",
+            "pix2pix",
+            "pix2pixHD",
+            "cycleGAN",
+            "dcgan",
+        ]
+
+        if self.model_name in gan_model_names_list:
+            
+            if not ("architecture_gen" in parameters["model"]):
+                sys.exit("The 'model' parameter needs 'architecture_gen' key to be defined")
+
+            if not ("architecture_disc" in parameters["model"]):
+                sys.exit("The 'model' parameter needs 'architecture_disc' key to be defined")
+
+            self.loss_mode = parameters["model"]["loss_mode"]
+            #gan mode will be added to parameter parser
+            self.gen_model_name = parameters["model"]["architecture_gen"]
+            self.disc_model_name = parameters["model"]["architecture_disc"]
+            self.dev = parameters["device"]
+            parameters["model"]["amp"] = False
+            self.amp = parameters["model"]["amp"]
+            self.amp, self.device, self.gpu_ids= networks.device_parser(self.amp, self.dev)
+            
+        else:
+            
+            self.final_convolution_layer = get_final_layer(
+            parameters["model"]["final_layer"]
+            )
+            
         self.n_dimensions = parameters["model"]["dimension"]
         self.n_channels = parameters["model"]["num_channels"]
         self.n_classes = parameters["model"]["num_classes"]
@@ -67,10 +101,9 @@ class ModelBase(nn.Module):
         self.patch_size = parameters["patch_size"]
         self.batch_size = parameters["batch_size"]
         self.amp = parameters["model"]["amp"]
-        self.final_convolution_layer = get_final_layer(
-            parameters["model"]["final_layer"]
+        self.linear_interpolation_mode = get_linear_interpolation_mode(
+            self.n_dimensions
         )
-
         # based on dimensionality, the following need to defined:
         # convolution, batch_norm, instancenorm, dropout
 
@@ -99,3 +132,18 @@ class ModelBase(nn.Module):
             self.AdaptiveMaxPool = nn.AdaptiveMaxPool3d
             self.Norm = get_norm_type(self.norm_type.lower(), self.n_dimensions)
             self.ReflectionPad = nn.ReflectionPad3d
+            
+            
+    def set_requires_grad(self, nets, requires_grad=False):
+        """Set requies_grad=Fasle for all the networks to avoid unnecessary computations
+        Parameters:
+            nets (network list)   -- a list of networks
+            requires_grad (bool)  -- whether the networks require gradients or not
+        """
+        if not isinstance(nets, list):
+            nets = [nets]
+        for net in nets:
+            if net is not None:
+                for parameters in net.parameters():
+                    parameters.requires_grad = requires_grad
+

@@ -40,11 +40,12 @@ def step(params,model, image, label=None):
     
     if params["problem_type"] == "segmentation":
         if label.shape[1] == 3:
-            label = label[:, 0, ...].unsqueeze(1)
+            #label = label[:, 0, ...].unsqueeze(1)
+            #Not necessary for GANs
             # this warning should only come up once
             if params["print_rgb_label_warning"]:
                 print(
-                    "WARNING: The label image is an RGB image, only the first channel will be used.",
+                    "WARNING: The output image is an RGB image.",
                     flush=True,
                 )
                 params["print_rgb_label_warning"] = False
@@ -57,7 +58,6 @@ def step(params,model, image, label=None):
         
     try:
         style_to_style = params["style_to_style"]
-        print(style_to_style)
         if style_to_style==False:
             style=False
         else:
@@ -71,7 +71,6 @@ def step(params,model, image, label=None):
     #image=image/255.0
     #label=label.float()
     #label=label/255.0
-    
 
     if params["model"]["amp"]:
         with torch.cuda.amp.autocast():

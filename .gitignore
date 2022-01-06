@@ -9,7 +9,6 @@ __pycache__
 *.swp
 dist/*
 *egg*
-*/.ipynb_checkpoints/*
 
 *DS_Store
 *output*

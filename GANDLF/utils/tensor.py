@@ -8,22 +8,43 @@ import torchio
 def one_hot(segmask_array, class_list):
     """
     This function creates a one-hot-encoded mask from the segmentation mask Tensor and specified class list
-
     Args:
         segmask_array (torch.Tensor): The segmentation mask Tensor.
         class_list (list): The list of classes based on which one-hot encoding needs to happen.
-
     Returns:
         torch.Tensor: The one-hot encoded torch.Tensor
     """
     batch_size = segmask_array.shape[0]
-    batch_stack = []
+
+    def_shape = segmask_array.shape
+    if len(def_shape) == 4:
+        # special case for sdnet
+        batch_stack = torch.zeros(
+            def_shape[0],
+            len(class_list),
+            def_shape[2],
+            def_shape[3],
+            dtype=torch.float32,
+            device=segmask_array.device,
+        )
+    else:
+        batch_stack = torch.zeros(
+            def_shape[0],
+            len(class_list),
+            def_shape[2],
+            def_shape[3],
+            def_shape[4],
+            dtype=torch.float32,
+            device=segmask_array.device,
+        )
+
     for b in range(batch_size):
-        one_hot_stack = []
         # since the input tensor is 5D, with [batch_size, modality, x, y, z], we do not need to consider the modality dimension for labels
         segmask_array_iter = segmask_array[b, 0, ...]
         bin_mask = segmask_array_iter == 0  # initialize bin_mask
+
         # this implementation allows users to combine logical operands
+        class_idx = 0
         for _class in class_list:
             if isinstance(_class, str):
                 if "||" in _class:  # special case
@@ -45,24 +66,22 @@ def one_hot(segmask_array, class_list):
                     bin_mask = segmask_array_iter == int(_class)
             else:
                 bin_mask = segmask_array_iter == int(_class)
-                bin_mask = bin_mask.long()
-            one_hot_stack.append(bin_mask)
-        one_hot_stack = torch.stack(one_hot_stack)
-        batch_stack.append(one_hot_stack)
-    batch_stack = torch.stack(batch_stack)
-    if batch_stack.shape[-1] == 1:
-        batch_stack = batch_stack.squeeze(-1)
+            bin_mask = bin_mask.long()
+            # we always ensure the append happens in dim 0, which is blank
+            bin_mask = bin_mask.unsqueeze(0)
+
+            batch_stack[b, class_idx, ...] = bin_mask
+            class_idx += 1
+
     return batch_stack
 
 
 def reverse_one_hot(predmask_array, class_list):
     """
     This function creates a full segmentation mask Tensor from a one-hot-encoded mask and specified class list
-
     Args:
         predmask_array (torch.Tensor): The predicted segmentation mask Tensor.
         class_list (list): The list of classes based on which one-hot encoding needs to happen.
-
     Returns:
         numpy.array: The final mask as numpy array.
     """
@@ -70,53 +89,64 @@ def reverse_one_hot(predmask_array, class_list):
         array_to_consider = predmask_array.cpu().numpy()
     else:
         array_to_consider = predmask_array
-    idx_argmax = np.argmax(array_to_consider, axis=0)
-    final_mask = 0
     special_cases_to_check = ["||"]
     special_case_detected = False
-    max_current = 0
+    # max_current = 0
 
     for _class in class_list:
         for case in special_cases_to_check:
             if isinstance(_class, str):
                 if case in _class:  # check if any of the special cases are present
                     special_case_detected = True
-                    # if present, then split the sub-class
-                    class_split = _class.split(case)
-                    for i in class_split:  # find the max for computation later on
-                        if int(i) > max_current:
-                            max_current = int(i)
+                    # # if present, then split the sub-class
+                    # class_split = _class.split(case)
+                    # for i in class_split:  # find the max for computation later on
+                    #     if int(i) > max_current:
+                    #         max_current = int(i)
 
+    final_mask = None
     if special_case_detected:
-        start_idx = 0
-        if (class_list[0] == 0) or (class_list[0] == "0"):
-            start_idx = 1
+        for i, _ in enumerate(class_list):
+            initialize_mask = False
+            if isinstance(class_list[i], str):
+                for case in special_cases_to_check:
+                    initialize_mask = False
+                    if case in class_list[i]:
+                        initialize_mask = True
+                    else:
+                        if class_list[i] != "0":
+                            initialize_mask = True
+            else:
+                if class_list[i] != 0:
+                    initialize_mask = True
 
-        final_mask = np.asarray(predmask_array[start_idx, ...], dtype=int)
-        start_idx += 1
-        for i in range(start_idx, len(class_list)):
-            # TODO: this should be replaced with information coming from the config that defines what the specific union of labels should be defined as
-            # for example:
-            # class_list = "[0,1||2]"
-            # output_classes = [0,1]
-            # this would make "1||2" be mapped to "1", and this mechanism can be extended for N possible combinations
-            final_mask += np.asarray(predmask_array[i, ...], dtype=int)
+            if initialize_mask:
+                if final_mask is None:
+                    final_mask = np.asarray(array_to_consider[i, ...], dtype=int)
+                else:
+                    # TODO: this should be replaced with information coming from the config that defines what the specific union of labels should be defined as
+                    # for example:
+                    # class_list = "[0,1||2]"
+                    # output_classes = [0,1]
+                    # this would make "1||2" be mapped to "1", and this mechanism can be extended for N possible combinations
+                    final_mask += np.asarray(array_to_consider[i, ...], dtype=int)
     else:
-        for idx, _class in enumerate(class_list):
-            final_mask = final_mask + (idx_argmax == idx) * _class
+        for i, _ in enumerate(class_list):
+            if final_mask is None:
+                final_mask = np.asarray(array_to_consider[i, ...], dtype=int) * int(i)
+            else:
+                final_mask += np.asarray(array_to_consider[i, ...], dtype=int) * int(i)
     return final_mask
 
 
 def send_model_to_device(model, amp, device, optimizer):
     """
     This function reads the environment variable(s) and send model to correct device
-
     Args:
         model (torch.nn.Module): The model that needs to be sent to specified device.
         amp (bool): Whether automatic mixed precision is to be used.
         device (str): Device type.
         optimizer (torch.optim): The optimizer for training.
-
     Returns:
         torch.nn.Module: The model after it has been sent to specified device
         bool: Whether automatic mixed precision is to be used or not.
@@ -190,11 +220,9 @@ def send_model_to_device(model, amp, device, optimizer):
 def get_class_imbalance_weights(training_data_loader, parameters):
     """
     This function calculates the penalty that is used for validation loss in multi-class problems
-
     Args:
         training_data_loader (torch.utils.data.DataLoader): The training data loader.
         parameters (dict): The parameters passed by the user yaml.
-
     Returns:
         dict: The penalty weights for different classes under consideration.
     """
@@ -222,21 +250,8 @@ def get_class_imbalance_weights(training_data_loader, parameters):
         # segmentation needs masks to be one-hot encoded
         if parameters["problem_type"] == "segmentation":
             # accumulate dice weights for each label
-            try:
-                style_to_style = parameters["style_to_style"]
-                if style_to_style == False:
-                    style = False
-                else:
-                    style = True
-            except:
-                style = True
-            if style == True:
-
-                mask = subject["label"][torchio.DATA]
-            else:
-                mask = subject["label"][torchio.DATA]
+            mask = subject["label"][torchio.DATA]
             one_hot_mask = one_hot(mask, parameters["model"]["class_list"])
-
             for i in range(0, len(parameters["model"]["class_list"])):
                 currentNumber = torch.nonzero(
                     one_hot_mask[:, i, ...], as_tuple=False
@@ -275,3 +290,21 @@ def get_class_imbalance_weights(training_data_loader, parameters):
     }
 
     return penalty_dict, weights_dict
+
+
+def get_linear_interpolation_mode(dimensionality):
+    """
+    Get linear interpolation mode.
+    Args:
+        dimensionality (int): The dimensions based on which interpolation mode is calculated
+    Returns:
+        str: Interpolation type to pass to interpolation function
+    """
+
+    mode = "nearest"
+    if dimensionality == 2:
+        mode = "bilinear"
+    elif dimensionality == 3:
+        mode = "trilinear"
+
+    return mode

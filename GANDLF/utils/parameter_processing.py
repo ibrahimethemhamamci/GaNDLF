@@ -1,5 +1,5 @@
 import GANDLF.models.modelBase as modelBase
-
+from GANDLF.utils import is_GAN
 
 def populate_header_in_parameters(parameters, headers):
     """
@@ -22,7 +22,13 @@ def populate_header_in_parameters(parameters, headers):
 
     # if the problem type is classification/segmentation, ensure the number of classes are picked from the configuration
     if parameters["problem_type"] != "regression":
-        parameters["model"]["num_classes"] = len(parameters["model"]["class_list"])
+        if is_GAN(parameters["model"]["architecture"]):
+            try:
+                parameters["model"]["num_classes"] = parameters["model"]["output_channel"]
+            except:
+                parameters["model"]["num_classes"] = 1
+        else:
+            parameters["model"]["num_classes"] = len(parameters["model"]["class_list"])
 
     # initialize number of channels for processing
     if not ("num_channels" in parameters["model"]):

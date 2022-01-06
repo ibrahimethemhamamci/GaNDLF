@@ -1,5 +1,5 @@
 import torch
-from .modelBase_GAN import ModelBase
+from .modelBase import ModelBase
 from . import networks
 from GANDLF.utils import send_model_to_device
 from GANDLF.schedulers import global_schedulers_dict
@@ -35,7 +35,7 @@ class dcgan(ModelBase):
         self.netG = networks.define_G(self.n_channels, self.n_classes, self.base_filters, self.gen_model_name, self.norm_type,
                                       gpu_ids=self.gpu_ids, ndim=self.n_dimensions, parameters=parameters)
 
-        self.netD = networks.define_D(self.n_channels+self.n_classes, self.base_filters, self.disc_model_name,
+        self.netD = networks.define_D(self.n_classes, self.base_filters, self.disc_model_name,
                                            norm=self.norm_type, gpu_ids=self.gpu_ids, ndim=self.n_dimensions, parameters=parameters)
 
         
@@ -69,7 +69,7 @@ class dcgan(ModelBase):
        
         #label =torch.cat((label,label,label),1)
         #image = torch.cat((image,image,image),1)
-        self.input = torch.zeros(label.shape[0], self.latent_dim).normal_(0, 1)
+        self.input = torch.zeros(label.shape[0],  self.latent_dim).normal_(0, 1)
 
         
         self.real_B = label.to(self.device)
@@ -79,6 +79,7 @@ class dcgan(ModelBase):
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG(self.input) 
+        print(self.fake_B.size())
         #self.fake_B = self.fake_B.reshape(self.fake_B.shape[0],self.fake_B.shape[2],self.fake_B.shape[3])# G(A)
 
         
@@ -87,15 +88,15 @@ class dcgan(ModelBase):
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
-        real = torch.ones(self.real_B.shape[0], 1).to(self.device)
-        fake = torch.zeros(self.real_B.shape[0], 1).to(self.device)
+        #real = torch.ones(self.real_B.shape[0], 1).to(self.device)
+        #fake = torch.zeros(self.real_B.shape[0], 1).to(self.device)
         # Fake; stop backprop to the generator by detaching fake_B
-        fake_AB = torch.cat((self.fake_B, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
-        pred_fake = self.netD(fake_AB)
-        self.loss_D_fake = self.criterionGAN(pred_fake, False)
+        #fake_AB = torch.cat((self.fake_B, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+        pred_fake = self.netD(self.fake_B)
+        self.loss_D_fake = self.criterionGAN(pred_fake.detach(), False)
         # Real
-        real_AB = torch.cat((self.real_B, self.real_B), 1)
-        pred_real = self.netD(real_AB)
+        #real_AB = torch.cat((self.real_B, self.real_B), 1)
+        pred_real = self.netD(self.real_B)
         self.loss_D_real = self.criterionGAN(pred_real, True)
         # combine loss and calculate gradients
         self.loss_D = (self.loss_D_fake + self.loss_D_real) 
@@ -105,10 +106,8 @@ class dcgan(ModelBase):
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
         # First, G(A) should fake the discriminator
-        fake_AB = torch.cat((self.real_B, self.real_B), 1)
-        pred_fake = self.netD(fake_AB)
-        real = torch.ones(pred_fake.shape[0], 1).to(self.device)
-
+        #fake_AB = torch.cat((self.real_B, self.real_B), 1)
+        pred_fake = self.netD(self.fake_B)
         #fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         self.loss_G = self.criterionGAN(pred_fake, True)
         # Second, G(A) = B
@@ -135,7 +134,7 @@ class dcgan(ModelBase):
 
                      # calculate gradients for D
         self.forward()                   # compute fake images: G(A)
-        #self.set_requires_grad(self.netD, False)
+        self.set_requires_grad(self.netD, False)
         self.optimizer_G.zero_grad()        # set G's gradients to zero
         self.backward_G()                   # calculate graidents for G
         

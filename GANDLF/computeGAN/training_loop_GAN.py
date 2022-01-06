@@ -10,7 +10,7 @@ import numpy as np
 from GANDLF.data.ImagesFromDataFrame import ImagesFromDataFrame
 from GANDLF.grad_clipping.grad_scaler import GradScaler, model_parameters_exclude_head
 from GANDLF.grad_clipping.clip_gradients import dispatch_clip_grad_
-from GANDLF.models import global_models_dict
+from GANDLF.models import global_gan_models_dict
 from GANDLF.utils import (
     get_date_time,
     send_model_to_device,
@@ -84,7 +84,7 @@ def train_network(model, train_dataloader, opt_list, params):
             # min is needed because for certain cases, batch size becomes smaller than the total remaining labels
             label = label.reshape(
                 min(params["batch_size"], len(label)),
-                len(params["value_keys"]),
+                params["value_keys"][0],
             )
         else:
             label = subject["label"][torchio.DATA]
@@ -144,7 +144,6 @@ def train_network(model, train_dataloader, opt_list, params):
                                 mode=params["clip_mode"],
                             )
                         nan_loss[i] = False
-                print("TRUE")
                 #optimizer.step()
                 model.optimize_parameters()
 
@@ -196,7 +195,7 @@ def train_network(model, train_dataloader, opt_list, params):
     return average_epoch_train_loss
 
 
-def training_loop(
+def training_loop_GAN(
     training_data,
     validation_data,
     device,
@@ -261,7 +260,7 @@ def training_loop(
         )
 
         # Fetch the model according to params mentioned in the configuration file
-    model = global_models_dict[params["model"]["architecture"]](parameters=params)
+    model = global_gan_models_dict[params["model"]["architecture"]](parameters=params)
 
     # Fetch the appropriate channel keys
     # Getting the channels for training and removing all the non numeric entries from the channels

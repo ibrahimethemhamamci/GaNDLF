@@ -10,6 +10,10 @@ from .imaging import (
     write_training_patches,
 )
 
+from .image_pool import(
+    ImagePool,
+)
+
 from .tensor import (
     one_hot,
     reverse_one_hot,
@@ -23,21 +27,28 @@ from .write_parse import (
     parseTrainingCSV,
 )
 
-from .parameter_processing import (
-    populate_header_in_parameters,
-    find_problem_type,
-    populate_channel_keys_in_params,
-)
+
 
 from .generic import (
     fix_paths,
     get_date_time,
     get_filename_extension_sanitized,
     version_check,
-    is_GAN,
 )
 
 from .modelio import (
     load_model,
     save_model,
+)
+
+
+
+from .isGAN import(
+    is_GAN,
+)
+
+from .parameter_processing import (
+    populate_header_in_parameters,
+    find_problem_type,
+    populate_channel_keys_in_params,
 )
