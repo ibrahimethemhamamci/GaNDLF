@@ -1,12 +1,11 @@
 import torch
-from .modelBase_GAN import ModelBase
+from .modelBase import ModelBase
 from . import networks
-from GANDLF.utils import send_model_to_device
+#from GANDLF.utils import send_model_to_device
 from GANDLF.schedulers import global_schedulers_dict
 from GANDLF.optimizers import global_optimizer_dict
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
-
 
 class pix2pixHD(ModelBase):
 
@@ -36,9 +35,7 @@ class pix2pixHD(ModelBase):
         except:
             self.feat_num=3
             
-        
-        
-        
+
         self.loss_names = ['G_GAN',"G_L1", 'D_real', 'D_fake']
 
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
@@ -186,30 +183,33 @@ class pix2pixHD(ModelBase):
             return self.test_loss_names
         else:
             print("Unrecognized argument for mode while returning loss names!!")
+    
+  
+
             
     
     def encode_input(self, label_map, inst_map=None, real_image=None, feat_map=None, infer=False):             
         if self.label_nc == 0:
-            input_label = label_map.data.cuda()
+            input_label = label_map.data.to(self.device)
         else:
             # create one-hot vector for label map 
             size = label_map.size()
             oneHot_size = (size[0], self.label_nc, size[2], size[3])
             input_label = torch.cuda.FloatTensor(torch.Size(oneHot_size)).zero_()
-            input_label = input_label.scatter_(1, label_map.data.long().cuda(), 1.0)
+            input_label = input_label.scatter_(1, label_map.data.long().to(self.device), 1.0)
             if self.data_type == 16:
                 input_label = input_label.half()
 
         # get edges from instance map
         if not self.no_instance:
-            inst_map = inst_map.data.cuda()
+            inst_map = inst_map.data.to(self.device)
             edge_map = self.get_edges(inst_map)
             input_label = torch.cat((input_label, edge_map), dim=1)         
         input_label = Variable(input_label, volatile=infer)
 
         # real images for training
         if real_image is not None:
-            real_image = Variable(real_image.data.cuda())
+            real_image = Variable(real_image.data.to(self.device))
 
         # instance map for feature encoding
        # if self.use_features:
@@ -250,11 +250,11 @@ class pix2pixHD(ModelBase):
         return feat_map
 
     def encode_features(self, image, inst):
-        image = Variable(image.cuda(), volatile=True)
+        image = Variable(image.to(self.device), volatile=True)
         feat_num = self.feat_num
         h, w = inst.size()[2], inst.size()[3]
         block_num = 32
-        feat_map = self.netE.forward(image, inst.cuda())
+        feat_map = self.netE.forward(image, inst.to(self.device))
         inst_np = inst.cpu().numpy().astype(int)
         feature = {}
         for i in range(self.label_nc):

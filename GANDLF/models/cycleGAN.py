@@ -1,11 +1,13 @@
 import torch
-from .modelBase_GAN import ModelBase
+from .modelBase import ModelBase
 from . import networks
 from GANDLF.utils import send_model_to_device
+from GANDLF.utils import ImagePool
+
 from GANDLF.schedulers import global_schedulers_dict
 from GANDLF.optimizers import global_optimizer_dict
 import matplotlib.pyplot as plt
-from ..util.image_pool import ImagePool
+#from ..utils.image_pool import ImagePool
 import itertools
 
 class cycleGAN(ModelBase):
@@ -30,10 +32,9 @@ class cycleGAN(ModelBase):
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         self.model_names = ['G_A', 'G_B', 'D_A', 'D_B']
         # define networks (both generator and discriminator)
-        
         self.netG_A= networks.define_G(self.n_channels, self.n_classes, self.base_filters, self.gen_model_name, self.norm_type,
                                       gpu_ids=self.gpu_ids, ndim=self.n_dimensions)
-        self.netG_B = networks.define_G(self.n_channels, self.n_classes, self.base_filters, self.gen_model_name, self.norm_type,
+        self.netG_B = networks.define_G(self.n_classes, self.n_channels, self.base_filters, self.gen_model_name, self.norm_type,
                                       gpu_ids=self.gpu_ids, ndim=self.n_dimensions)
 
         self.netD_A = networks.define_D(self.n_classes, self.base_filters, self.disc_model_name,
@@ -56,6 +57,7 @@ class cycleGAN(ModelBase):
         parameters["model_parameters"] = itertools.chain(self.netD_A.parameters(), self.netD_B.parameters())
         self.optimizer_D= global_optimizer_dict[parameters["optimizer"]["type"]](parameters)
         
+        print(self.optimizer_G)
         if self.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
                 assert(self.n_channels == self.n_classes)
         self.fake_A_pool = ImagePool(self.pool_size)  # create image buffer to store previously generated images
@@ -90,15 +92,18 @@ class cycleGAN(ModelBase):
         
         self.real_B = label.to(self.device)
         #self.real_A=transform(self.real_A)
-
+        print(self.real_B.size())
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG_A(self.real_A)  # G_A(A)
         self.rec_A = self.netG_B(self.fake_B)   # G_B(G_A(A))
         self.fake_A = self.netG_B(self.real_B)  # G_B(B)
         self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B))
-
-        
+        img=(self.fake_A[0]+1)/2 * 255
+        img = img.reshape(512,512)
+        import cv2
+        cv2.imwrite("./test2.png", img.cpu().detach().numpy())
+                    
     def return_optimizers(self):
         return self.optimizer_list
 
@@ -147,6 +152,9 @@ class cycleGAN(ModelBase):
             # G_B should be identity if real_A is fed: ||G_B(A) - A||
             self.idt_B = self.netG_B(self.real_A)
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
+            
+            self.idt_B.to(self.device)
+            self.idt_A.to(self.device)
         else:
             self.loss_idt_A = 0
             self.loss_idt_B = 0
@@ -167,7 +175,6 @@ class cycleGAN(ModelBase):
 
     def calc_loss(self):
 
-        
         self.forward()      # compute fake images and reconstruction images.
         # G_A and G_B
         self.set_requires_grad([self.netD_A, self.netD_B], False)  # Ds require no gradients when optimizing Gs
@@ -218,6 +225,7 @@ class cycleGAN(ModelBase):
             print("Unrecognized argument for mode while returning loss names!!")
             
     def preprocess(self,img,label):
+        label = label.float()
         img=(2*img/255.0)-1
         label=(2*label/255.0)-1
         return img,label

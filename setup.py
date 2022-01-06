@@ -35,7 +35,7 @@ requirements = [
     "seaborn",
     "pyyaml",
     "openslide-python",
-    "scikit-image",
+    "scikit-image>=0.19.0",
     "matplotlib",
     "requests>=2.25.0",
     "pyvips",
@@ -43,7 +43,8 @@ requirements = [
     "coverage",
     "psutil",
     "medcam",
-    "torchmetrics",
+    "torchmetrics = 0.6.2",
+    "lpips", #lpips should be downloaded as well
     "OpenPatchMiner==0.1.6",
 ]
 

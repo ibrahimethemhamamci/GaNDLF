@@ -1,7 +1,5 @@
 import os, datetime, sys
 import numpy as np
-from GANDLF.models import global_gan_models_dict
-
 
 def checkPatchDivisibility(patch_size, number=16):
     """
@@ -31,6 +29,7 @@ def checkPatchDivisibility(patch_size, number=16):
     if (unique.shape[0] == 1) and (unique[0] <= number):
         return False
     return True
+#from GANDLF.models import global_gan_models_dict
 
 
 def fix_paths(cwd):
@@ -102,15 +101,3 @@ def version_check(version_from_config, version_to_check):
 
     return True
 
-
-def is_GAN(model_architecture):
-    """
-    This function checks if the model architecture is a GAN or not.
-    Args:
-        model_architecture (str): The model architecture to check.
-    Returns:
-        bool: If the model architecture is a GAN or not.
-    """
-    if model_architecture in global_gan_models_dict.keys():
-        return True
-    return False

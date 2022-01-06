@@ -188,7 +188,7 @@ def validate_network(
                     [patch["value_" + key] for key in params["value_keys"]], dim=0
                 )
                 image = image.unsqueeze(0)
-                image = image.float().to(params["device"])
+                image = image.float().cpu()
                 ## special case for 2D
                 if image.shape[-1] == 1:
                     image = torch.squeeze(image, -1)
@@ -316,7 +316,11 @@ def validate_network(
                     #)
                     
                     pred_mask=pred_mask[0][0]
-                    pred_mask[pred_mask < 0] = 0
+                    #special case for cycleGAN
+                    if params["model"]["architecture"] == "cycleGAN":
+                        pred_mask[pred_mask < -1] = -1
+                    else:
+                        pred_mask[pred_mask < 0 ] = 0
 
                     result_array = np.swapaxes(pred_mask, 0, 2)
                     #result_array=pred_mask
@@ -338,7 +342,10 @@ def validate_network(
                         #)
                     import cv2
                     if (type(result_image[0][0])==np.float32):
-                        result_image=result_image*255
+                        #special case for cycleGAN
+                        if params["model"]["architecture"] == "cycleGAN":
+                            result_image = (result_image + 1) / 2
+                        result_image = result_image*255
                         cv2.imwrite(
                         os.path.join(
                             current_output_dir, subject["subject_id"][0] + "_seg" + ext
@@ -379,11 +386,14 @@ def validate_network(
             output_prediction = output_prediction.squeeze(-1)
             if is_inference and is_classification:
                 logits_list.append(output_prediction)
-            label_ground_truth = label_ground_truth/255.0
-            print(label_ground_truth.max())
+            if not params["style_to_style"]:
+                label_ground_truth = model_main.preprocess(label_ground_truth)
+            else:
+                _ , label_ground_truth = model_main.preprocess(label_ground_truth, label_ground_truth)
+            label_ground_truth = label_ground_truth.squeeze(-1)
             # we cast to float32 because float16 was causing nan
             final_loss, final_metric = get_loss_and_metrics(
-                image, label_ground_truth.to(torch.float32), output_prediction.to(torch.float32), params
+                image, label_ground_truth, output_prediction, params
             )
             if params["verbose"]:
                 print(

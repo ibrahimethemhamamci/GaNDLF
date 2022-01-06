@@ -1,13 +1,13 @@
-import os, sys
+import os
 import numpy as np
 
+import torch
 import torchio
 from torchio.transforms import (
     Resample,
     Compose,
     Pad,
 )
-from torchio import Image, Subject
 import SimpleITK as sitk
 
 from GANDLF.utils import (
@@ -33,7 +33,6 @@ global_sampler_dict = {
 def ImagesFromDataFrame(dataframe, parameters, train):
     """
     Reads the pandas dataframe and gives the dataloader to use for training/validation/testing
-
     Parameters
     ----------
     dataframe : pandas.DataFrame
@@ -42,7 +41,6 @@ def ImagesFromDataFrame(dataframe, parameters, train):
         The parameters dictionary
     train : bool
         If the dataloader is for training or not. For training, the patching infrastructure and data augmentation is applied.
-
     Returns
     -------
     subjects_dataset: torchio.SubjectsDataset
@@ -62,6 +60,7 @@ def ImagesFromDataFrame(dataframe, parameters, train):
     preprocessing = parameters["data_preprocessing"]
     in_memory = parameters["in_memory"]
     enable_padding = parameters["enable_padding"]
+    
     try:
         style_to_style = parameters["style_to_style"]
         if style_to_style == False:
@@ -70,6 +69,7 @@ def ImagesFromDataFrame(dataframe, parameters, train):
             style = True
     except:
         style = True
+
 
     # Finding the dimension of the dataframe for computational purposes later
     num_row, num_col = dataframe.shape
@@ -112,10 +112,8 @@ def ImagesFromDataFrame(dataframe, parameters, train):
             if not os.path.isfile(str(dataframe[channel][patient])):
                 skip_subject = True
 
-            # assigning the dict key to the channel
-            subject_dict[str(channel)] = Image(
-                type=torchio.INTENSITY,
-                path=dataframe[channel][patient],
+            subject_dict[str(channel)] = torchio.ScalarImage(
+                dataframe[channel][patient]
             )
 
             # store image spacing information if not present
@@ -123,57 +121,45 @@ def ImagesFromDataFrame(dataframe, parameters, train):
                 file_reader = sitk.ImageFileReader()
                 file_reader.SetFileName(dataframe[channel][patient])
                 file_reader.ReadImageInformation()
-                subject_dict["spacing"] = file_reader.GetSpacing()
+
+                subject_dict["spacing"] = torch.Tensor(file_reader.GetSpacing())
 
             # if resize is requested, the perform per-image resize with appropriate interpolator
             if resize_images:
                 img = subject_dict[str(channel)].as_sitk()
                 img_resized = resize_image(img, preprocessing["resize"])
                 # always ensure resized image spacing is used
-                subject_dict["spacing"] = img_resized.GetSpacing()
-                torchio.Image.from_sitk(img_resized)
-                subject_dict[str(channel)] = torchio.Image.from_sitk(img_resized)
+                subject_dict["spacing"] = torch.Tensor(img_resized.GetSpacing())
+                subject_dict[str(channel)] = torchio.ScalarImage.from_sitk(img_resized)
 
         # # for regression
         # if predictionHeaders:
         #     # get the mask
         #     if (subject_dict['label'] is None) and (class_list is not None):
         #         sys.exit('The \'class_list\' parameter has been defined but a label file is not present for patient: ', patient)
+
         if labelHeader is not None and style == True:
             if not os.path.isfile(str(dataframe[labelHeader][patient])):
                 skip_subject = True
 
-            subject_dict["label"] = Image(
-                type=torchio.LABEL,
-                path=dataframe[labelHeader][patient],
-            )
-            subject_dict["path_to_metadata"] = str(dataframe[label][patient])
+            subject_dict["label"] = torchio.LabelMap(dataframe[labelHeader][patient])
 
-        else:
-            subject_dict["label"] = Image(
-                type=torchio.LABEL,
-                path=dataframe[channel][patient],
+            # if resize is requested, the perform per-image resize with appropriate interpolator
+            if resize_images:
+                img = sitk.ReadImage(str(dataframe[labelHeader][patient]))
+                img_resized = resize_image(img, preprocessing["resize"])
+                subject_dict["label"] = torchio.LabelMap.from_sitk(img_resized)
+
+            subject_dict["path_to_metadata"] = str(dataframe[labelHeader][patient])
+        elif labelHeader is not None and style == False:
+            subject_dict["label"] = torchio.ScalarImage(
+                dataframe[channel][patient]
             )
             subject_dict["path_to_metadata"] = str(dataframe[channel][patient])
 
-            # for the weird cases where mask is read as an RGB image, ensure only the first channel is used
-        if subject_dict["label"]["data"].shape[0] == 3:
-            subject_dict["label"]["data"] = subject_dict["label"]["data"][0].unsqueeze(
-                0
-            )
-            # this warning should only come up once
-            if parameters["print_rgb_label_warning"]:
-                print(
-                    "WARNING: The label image is an RGB image, only the first channel will be used.",
-                    flush=True,
-                )
-                parameters["print_rgb_label_warning"] = False
-
-            # if resize is requested, the perform per-image resize with appropriate interpolator
-        if resize_images:
-            img = sitk.ReadImage(str(dataframe[labelHeader][patient]))
-            img_resized = resize_image(img, preprocessing["resize"])
-            subject_dict["label"] = torchio.LabelMap.from_sitk(img_resized)
+        else:
+            subject_dict["label"] = "NA"
+            subject_dict["path_to_metadata"] = str(dataframe[channel][patient])
 
         # iterating through the values to predict of the subject
         valueCounter = 0
@@ -187,7 +173,7 @@ def ImagesFromDataFrame(dataframe, parameters, train):
         # skip subject the condition was tripped
         if not skip_subject:
             # Initializing the subject object using the dict
-            subject = Subject(subject_dict)
+            subject = torchio.Subject(subject_dict)
             # https://github.com/fepegar/torchio/discussions/587#discussioncomment-928834
             # this is causing memory usage to explode, see https://github.com/CBICA/GaNDLF/issues/128
             if parameters["verbose"]:

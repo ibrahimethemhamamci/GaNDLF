@@ -4,7 +4,8 @@ from sklearn.model_selection import KFold
 from pathlib import Path
 
 # from GANDLF.data.ImagesFromDataFrame import ImagesFromDataFrame
-from GANDLF.compute import training_loop, training_loop_GAN
+from GANDLF.compute import training_loop
+from GANDLF.computeGAN import training_loop_GAN
 from GANDLF.utils import is_GAN
 
 

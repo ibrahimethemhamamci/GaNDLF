@@ -2,7 +2,6 @@ import os, pickle, sys
 from pathlib import Path
 
 from GANDLF.training_manager import TrainingManager, TrainingManager_split
-from GANDLF.training_manager_GAN import TrainingManagerGAN
 from GANDLF.inference_manager import InferenceManager
 from GANDLF.parseConfig import parseConfig
 from GANDLF.utils import populate_header_in_parameters, parseTrainingCSV

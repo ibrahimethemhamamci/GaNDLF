@@ -486,12 +486,6 @@ def training_loop(
     )
 
 
-def training_loop_GAN(model, train_dataloader, optimizer, params):
-    # keep same interface as training_loop for consistency; add extra parameters using kwargs
-    # put GAN-related training here
-    test = 1
-
-
 if __name__ == "__main__":
 
     import argparse, pickle, pandas
