@@ -20,7 +20,8 @@ except Exception as error:
     sys.stderr.write("Warning: Could not open '%s' due %s\n" % (filepath, error))
 
 requirements = [
-    "numpy==1.19.2",
+    "black",
+    "numpy==1.21.0",
     "scipy",
     "SimpleITK==2.1.0",
     "torch>=1.7",
@@ -43,8 +44,9 @@ requirements = [
     "coverage",
     "psutil",
     "medcam",
-    "torchmetrics = 0.6.2",
-    "lpips", #lpips should be downloaded as well
+    "torchmetrics",
+    "lpips",
+    "opencv-python",
     "OpenPatchMiner==0.1.6",
 ]
 
