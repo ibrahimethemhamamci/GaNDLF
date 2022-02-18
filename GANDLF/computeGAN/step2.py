@@ -73,7 +73,7 @@ def step(model_main, image, label, params):
     #image=image/255.0
     #label=label.float()
     #label=label/255.0
-
+    
     if params["model"]["amp"]:
         with torch.cuda.amp.autocast():
             output = model(image)

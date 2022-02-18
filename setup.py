@@ -43,7 +43,7 @@ requirements = [
     "coverage",
     "psutil",
     "medcam",
-    "torchmetrics = 0.6.2",
+    "torchmetrics >= 0.6.2",
     "lpips", #lpips should be downloaded as well
     "OpenPatchMiner==0.1.6",
 ]

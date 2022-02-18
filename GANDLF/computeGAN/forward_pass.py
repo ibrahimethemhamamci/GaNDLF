@@ -305,58 +305,104 @@ def validate_network(
                 output_prediction = aggregator.get_output_tensor()
                 output_prediction = output_prediction.unsqueeze(0)
                 label_ground_truth = label_ground_truth.unsqueeze(0)
+                
+                #temporary for chestxray
+                #img_o = image.unsqueeze(0) 
+
                 if params["save_output"]:
                     path_to_metadata = subject["path_to_metadata"][0]
                     inputImage = sitk.ReadImage(path_to_metadata)
                     ext = get_filename_extension_sanitized(path_to_metadata)
+                    ext = ".jpg"
                     pred_mask = output_prediction.numpy()
                     # '0' because validation/testing dataloader always has batch size of '1'
                    # pred_mask = reverse_one_hot(
                     #    pred_mask[0], params["model"]["class_list"]
                     #)
-                    
+                    #temporary for chestxray
+                    img_out = image.cpu().detach().numpy() 
+
                     pred_mask=pred_mask[0][0]
+                    img_out = img_out[0][0]
                     #special case for cycleGAN
                     if params["model"]["architecture"] == "cycleGAN":
                         pred_mask[pred_mask < -1] = -1
                     else:
                         pred_mask[pred_mask < 0 ] = 0
+                        img_out[img_out < 0] = 0
+                        
 
                     result_array = np.swapaxes(pred_mask, 0, 2)
+                    img_arr = np.swapaxes(img_out, 0, 2)
                     #result_array=pred_mask
                     ## special case for 2D
                     if image.shape[-1] > 1:
                         # ITK expects array as Z,X,Y
-                        result_image = result_array
+                        result_array = result_array
+                         #temporary for chestxray
+                        img_arr = img_arr
                     else:
-                        result_image = result_array.squeeze(0)
-                   # result_image.CopyInformation(inputImage)
+                        result_array = result_array.squeeze(0)
+                         #temporary for chestxray
+                        img_arr = img_arr.squeeze(0)
+                        #print(img_arr.shape)
+                        #print(result_array.shape)
+                        
+                    if (type(result_array[0][0])==np.float32):
+                        if params["model"]["architecture"] == "cycleGAN":
+                            result_array = (result_array + 1) / 2
+                        result_array = result_array*255
+                        result_array = result_array.astype(int)
+                        
+                         #temporary for chestxray
+                        #img_arr = img_arr*255
+                        img_arr = img_arr.astype(int)
+                        
+                    result_image = sitk.GetImageFromArray(result_array)
+                    
+                    #temporary for chestxray
+                    result_image.CopyInformation(inputImage)
                     # cast as the same data type
-                    #result_image = sitk.Cast(result_image, inputImage.GetPixelID())
+                    result_image = sitk.Cast(result_image, inputImage.GetPixelID())
+                    
+                    #temporary for chestxray
+                    img_save = sitk.GetImageFromArray(img_arr)
+                    img_save.CopyInformation(inputImage)
+                    img_save = sitk.Cast(img_save, inputImage.GetPixelID())
+                    
                     # this handles cases that need resampling/resizing
                     #if "resample" in params["data_preprocessing"]:
-                     #   result_image = resample_image(
-                      #      result_image,
-                       #     inputImage.GetSpacing(),
-                        #    interpolator=sitk.sitkNearestNeighbor,
+                    #    result_image = resample_image(
+                     #       result_image,
+                      #      inputImage.GetSpacing(),
+                       #     interpolator=sitk.sitkNearestNeighbor,
                         #)
                     import cv2
-                    if (type(result_image[0][0])==np.float32):
+                    if (type(result_array[0][0])==np.float32):
                         #special case for cycleGAN
-                        if params["model"]["architecture"] == "cycleGAN":
-                            result_image = (result_image + 1) / 2
-                        result_image = result_image*255
-                        cv2.imwrite(
-                        os.path.join(
-                            current_output_dir, subject["subject_id"][0] + "_seg" + ext
-                        ), result_image.astype(int)
-                        )
+                        #if params["model"]["architecture"] == "cycleGAN":
+                         #   result_image = (result_image + 1) / 2
+                        #result_image = result_image*255
+                        sitk.WriteImage(
+                           result_image,
+                           os.path.join(
+                               current_output_dir, subject["subject_id"][0] + "_seg" + ext
+                           ),
+                       )
                         
                     else:    
-                        cv2.imwrite(
+                        sitk.WriteImage(
+                            result_image,
                             os.path.join(
                                 current_output_dir, subject["subject_id"][0] + "_seg" + ext
-                            ), result_image
+                            ),
+                        )
+                         #temporary for chestxray
+                        sitk.WriteImage(
+                            img_save,
+                            os.path.join(
+                                current_output_dir, subject["subject_id"][0] + "_input" + ext
+                            ),
                         )
                   
 

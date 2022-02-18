@@ -122,7 +122,7 @@ def perform_sanity_check_on_subject(subject, parameters, style):
     if len(list_for_comparison) > 1:
         for key in list_for_comparison:
             if file_reader_base is None:
-		if subject[str(key)]["path"] != "":
+                if subject[str(key)]["path"] != "":
                     file_reader_base = sitk.ImageFileReader()
                     file_reader_base.SetFileName(subject[str(key)]["path"])
                     file_reader_base.ReadImageInformation()
