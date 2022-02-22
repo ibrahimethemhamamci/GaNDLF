@@ -6,6 +6,7 @@ from GANDLF.schedulers import global_schedulers_dict
 from GANDLF.optimizers import global_optimizer_dict
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
+import cv2
 
 class pix2pixHD(ModelBase):
 
@@ -87,7 +88,10 @@ class pix2pixHD(ModelBase):
         
         
         self.real_B = label.to(self.device)
-        
+        #img1=self.real_A[0][0]*255
+        #img2=self.real_B[0][0]*255
+       # cv2.imwrite(img1, self.real_A.cpu().detach().numpy())
+       # cv2.imwrite(img2, self.real_A.cpu().detach().numpy())
         
         #self.real_A=transform(self.real_A)
 
@@ -287,4 +291,14 @@ class pix2pixHD(ModelBase):
         img=img/255.0
         label=label.float()
         label=label/255.0
+        
+        
+        imgout = img[0][0]*255
+        imgout = imgout.int()
+        cv2.imwrite("test.jpg", imgout.cpu().detach().numpy())
+        lout = label[0][0]*255
+        lout = lout.int()
+        cv2.imwrite("test2.jpg", lout.cpu().detach().numpy())
+        
         return img,label
+         

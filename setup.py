@@ -77,6 +77,7 @@ requirements = [
     "torchmetrics",
     "lpips",
     "opencv-python",
+    "torchmetrics >= 0.6.2",
     "OpenPatchMiner==0.1.6",
     "pydicom",
 ]

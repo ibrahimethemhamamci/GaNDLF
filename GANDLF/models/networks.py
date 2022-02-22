@@ -452,10 +452,7 @@ def define_G_HD(input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_
     else:
         raise('generator not implemented!')
     print(netG)
-    if len(gpu_ids) > 0:
-        assert(torch.cuda.is_available())   
-        netG.cuda(gpu_ids[0])
-    
+
     return init_net(netG, gpu_ids=gpu_ids)
 
 

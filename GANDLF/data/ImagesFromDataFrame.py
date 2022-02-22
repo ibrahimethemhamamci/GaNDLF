@@ -183,9 +183,9 @@ def ImagesFromDataFrame(dataframe, parameters, train, loader_type=""):
             subjects_list.append(subject)
 
     transformations_list = []
-
+    Chestxray = parameters["Chestxray"] ##temporary for chestxray project
     # augmentations are applied to the training set only
-    if train and not (augmentations == None):
+    if (train or Chestxray) and not (augmentations == None):
         for aug in augmentations:
             aug_lower = aug.lower()
             if aug_lower in global_augs_dict:
