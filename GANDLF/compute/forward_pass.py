@@ -5,6 +5,7 @@ import SimpleITK as sitk
 import numpy as np
 import pandas as pd
 import torchio
+from GANDLF.utils import is_GAN
 
 from GANDLF.utils import (
     get_date_time,
@@ -14,11 +15,24 @@ from GANDLF.utils import (
 from GANDLF.post_process import fill_holes
 from .step import step
 from .loss_and_metric import get_loss_and_metrics
+from .step import step_GAN_forwardpass
+from .loss_and_metric import get_loss_and_metrics_GAN
+
 
 
 def validate_network(
-    model, valid_dataloader, scheduler, params, epoch=0, mode="validation"
+    model_main, valid_dataloader, scheduler, params, epoch=0, mode="validation"
 ):
+    if is_GAN(params["model"]["architecture"]):  # gan mode
+        model=model_main.return_generator()
+        step_func = step_GAN_forwardpass
+        get_loss_and_metrics_func = get_loss_and_metrics_GAN
+
+    else:
+        model = model_main
+        step_func = step
+        get_loss_and_metrics_func = get_loss_and_metrics
+
     """
     Function to validate a network for a single epoch
 
@@ -158,6 +172,8 @@ def validate_network(
                 ## special case for 2D
                 if image.shape[-1] == 1:
                     image = torch.squeeze(image, -1)
+                if is_GAN(params["model"]["architecture"]):
+                    image=image.float()
                 pred_output += model(image)
             pred_output = pred_output.cpu() / params["q_samples_per_volume"]
             pred_output /= params["scaling_factor"]
@@ -178,7 +194,7 @@ def validate_network(
                     + str(pred_output.cpu().max().item())
                     + "\n"
                 )
-            final_loss, final_metric = get_loss_and_metrics(
+            final_loss, final_metric = get_loss_and_metrics_func(
                 image, valuesToPredict, pred_output, params
             )
             # # Non network validing related
@@ -242,7 +258,7 @@ def validate_network(
                         flush=True,
                     )
 
-                result = step(model, image, label, params)
+                result = step_func(model_main, image, label, params)
 
                 # get the current attention map and add it to its aggregator
                 if params["medcam_enabled"]:
@@ -265,7 +281,7 @@ def validate_network(
                         output_prediction += output
 
             # save outputs
-            if is_segmentation:
+            if is_segmentation and not is_GAN(params["model"]["architecture"]):
                 output_prediction = aggregator.get_output_tensor()
                 output_prediction = output_prediction.unsqueeze(0)
                 label_ground_truth = label_ground_truth.unsqueeze(0).to(torch.float32)
@@ -312,6 +328,109 @@ def validate_network(
                             current_output_dir, subject["subject_id"][0] + "_seg" + ext
                         ),
                     )
+            #Special case for GANs        
+            if is_GAN(params["model"]["architecture"]):
+                output_prediction = aggregator.get_output_tensor()
+                output_prediction = output_prediction.unsqueeze(0)
+                label_ground_truth = label_ground_truth.unsqueeze(0)
+                
+                #temporary for chestxray
+                #img_o = image.unsqueeze(0) 
+
+                if params["save_output"]:
+                    path_to_metadata = subject["path_to_metadata"][0]
+                    inputImage = sitk.ReadImage(path_to_metadata)
+                    ext = get_filename_extension_sanitized(path_to_metadata)
+                    ext = ".jpg"
+                    pred_mask = output_prediction.numpy()
+                    # '0' because validation/testing dataloader always has batch size of '1'
+                   # pred_mask = reverse_one_hot(
+                    #    pred_mask[0], params["model"]["class_list"]
+                    #)
+                    #temporary for chestxray
+                    img_out = image.cpu().detach().numpy() 
+
+                    pred_mask=pred_mask[0][0]
+                    img_out = img_out[0][0]
+                    #special case for cycleGAN
+                    if params["model"]["architecture"] == "cycleGAN":
+                        pred_mask[pred_mask < -1] = -1
+                    else:
+                        pred_mask[pred_mask < 0 ] = 0
+                        img_out[img_out < 0] = 0
+                        
+
+                    result_array = np.swapaxes(pred_mask, 0, 2)
+                    img_arr = np.swapaxes(img_out, 0, 2)
+                    #result_array=pred_mask
+                    ## special case for 2D
+                    if image.shape[-1] > 1:
+                        # ITK expects array as Z,X,Y
+                        result_array = result_array
+                         #temporary for chestxray
+                        img_arr = img_arr
+                    else:
+                        result_array = result_array.squeeze(0)
+                         #temporary for chestxray
+                        img_arr = img_arr.squeeze(0)
+                        #print(img_arr.shape)
+                        #print(result_array.shape)
+                        
+                    if (isinstance(result_array[0][0],np.float32)):
+                        if params["model"]["architecture"] == "cycleGAN":
+                            result_array = (result_array + 1) / 2
+                        result_array = result_array*255
+                        result_array = result_array.astype(int)
+                        
+                         #temporary for chestxray
+                        #img_arr = img_arr*255
+                        img_arr = img_arr.astype(int)
+                        
+                    result_image = sitk.GetImageFromArray(result_array)
+                    
+                    #temporary for chestxray
+                    result_image.CopyInformation(inputImage)
+                    # cast as the same data type
+                    result_image = sitk.Cast(result_image, inputImage.GetPixelID())
+                    
+                    #temporary for chestxray
+                    img_save = sitk.GetImageFromArray(img_arr)
+                    img_save.CopyInformation(inputImage)
+                    img_save = sitk.Cast(img_save, inputImage.GetPixelID())
+                    
+                    # this handles cases that need resampling/resizing
+                    #if "resample" in params["data_preprocessing"]:
+                    #    result_image = resample_image(
+                     #       result_image,
+                      #      inputImage.GetSpacing(),
+                       #     interpolator=sitk.sitkNearestNeighbor,
+                        #)
+                    if (isinstance(result_array[0][0],np.float32)):
+                        #special case for cycleGAN
+                        #if params["model"]["architecture"] == "cycleGAN":
+                         #   result_image = (result_image + 1) / 2
+                        #result_image = result_image*255
+                        sitk.WriteImage(
+                           result_image,
+                           os.path.join(
+                               current_output_dir, subject["subject_id"][0] + "_out" + ext
+                           ),
+                       )
+                        
+                    else:    
+                        sitk.WriteImage(
+                            result_image,
+                            os.path.join(
+                                current_output_dir, subject["subject_id"][0] + "_out" + ext
+                            ),
+                        )
+                         #temporary for chestxray
+                        sitk.WriteImage(
+                            img_save,
+                            os.path.join(
+                                current_output_dir, subject["subject_id"][0] + "_input" + ext
+                            ),
+                        )
             else:
                 # final regression output
                 output_prediction = output_prediction / len(patch_loader)
@@ -337,9 +456,17 @@ def validate_network(
             if is_inference and is_classification:
                 logits_list.append(output_prediction)
                 subject_id_list.append(subject.get("subject_id")[0])
+                
+            #Special case for GANs
+            if is_GAN(params["model"]["architecture"]):     
+                if not params["style_to_style"]:
+                    label_ground_truth = model_main.preprocess(label_ground_truth)
+                else:
+                    _ , label_ground_truth = model_main.preprocess(label_ground_truth, label_ground_truth)
+                label_ground_truth = label_ground_truth.squeeze(-1)
 
             # we cast to float32 because float16 was causing nan
-            final_loss, final_metric = get_loss_and_metrics(
+            final_loss, final_metric = get_loss_and_metrics_func(
                 image,
                 label_ground_truth,
                 output_prediction.to(torch.float32),
@@ -401,17 +528,30 @@ def validate_network(
             "     Epoch Final   " + mode + " " + metric + " : ",
             average_epoch_valid_metric[metric],
         )
-
-    if scheduler is not None:
-        if params["scheduler"]["type"] in [
-            "reduce_on_plateau",
-            "reduce-on-plateau",
-            "plateau",
-            "reduceonplateau",
-        ]:
-            scheduler.step(average_epoch_valid_loss)
-        else:
-            scheduler.step()
+        
+    if type(scheduler) is list:
+        for scheduler in scheduler:
+            if scheduler is not None:
+                if params["scheduler"]["type"] in [
+                    "reduce_on_plateau",
+                    "reduce-on-plateau",
+                    "plateau",
+                    "reduceonplateau",
+                ]:
+                    scheduler.step(average_epoch_valid_loss)
+                else:
+                    scheduler.step()
+    else:
+        if scheduler is not None:
+            if params["scheduler"]["type"] in [
+                "reduce_on_plateau",
+                "reduce-on-plateau",
+                "plateau",
+                "reduceonplateau",
+            ]:
+                scheduler.step(average_epoch_valid_loss)
+            else:
+                scheduler.step()
 
     # write the predictions, if appropriate
     if params["save_output"]:

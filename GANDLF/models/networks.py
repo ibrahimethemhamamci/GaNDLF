@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 from .modelBase_block import ModelBase_Blocks
 from torch.nn import init
+from torch.nn import Identity
 import functools
 import os
 import sys
 from GANDLF.schedulers import global_schedulers_dict
-import cv2
-import cv
+import ast
+import numpy as np
 
 def init_weights(net, init_type='normal', init_gain=0.002):
     """Initialize network weights.
@@ -96,7 +97,7 @@ def device_parser(amp, device):
             if torch.cuda.device_count() == 1:
                 dev = "0"
             gpu_ids=[]
-            dev_int = int(eval(dev))
+            dev_int =  ast.literal_eval(dev)
             gpu_ids.append(dev_int)
             print("Device finally used: ", dev)
             # device = torch.device('cuda:' + dev)
@@ -156,7 +157,7 @@ def get_scheduler(params):
     return scheduler
 
 
-def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[0]):
     
     """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
     Parameters:
@@ -327,7 +328,7 @@ class VGGLoss(nn.Module):
             y=torch.cat((y, y, y), 1)
         x_vgg, y_vgg = self.vgg(x), self.vgg(y)
         loss = 0
-        for i in range(len(x_vgg)):
+        for i, num in enumerate(x_vgg):
             loss += self.weights[i] * self.criterion(x_vgg[i], y_vgg[i].detach())        
         return loss
 
@@ -401,7 +402,7 @@ class GANLoss(nn.Module):
         return loss
 
 
-def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', constant=1.0, lambda_gp=10.0):
+def cal_gradient_penalty(netD, real_data, fake_data, device, types='mixed', constant=1.0, lambda_gp=10.0):
     """Calculate the gradient penalty loss, used in WGAN-GP paper https://arxiv.org/abs/1704.00028
 
     Arguments:
@@ -416,11 +417,11 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
     Returns the gradient penalty loss
     """
     if lambda_gp > 0.0:
-        if type == 'real':   # either use real images, fake images, or a linear interpolation of two.
+        if types == 'real':   # either use real images, fake images, or a linear interpolation of two.
             interpolatesv = real_data
-        elif type == 'fake':
+        elif types == 'fake':
             interpolatesv = fake_data
-        elif type == 'mixed':
+        elif types == 'mixed':
             alpha = torch.rand(real_data.shape[0], 1, device=device)
             alpha = alpha.expand(real_data.shape[0], real_data.nelement() // real_data.shape[0]).contiguous().view(*real_data.shape)
             interpolatesv = alpha * real_data + ((1 - alpha) * fake_data)
@@ -439,7 +440,7 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
 
     
 def define_G_HD(input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_global=9, n_local_enhancers=1, 
-             n_blocks_local=3, norm='instance', gpu_ids=[], ndim=2,  use_dropout=False):    
+             n_blocks_local=3, norm='instance', gpu_ids=[0], ndim=2,  use_dropout=False):    
     norm_layer = get_norm_layer(norm_type=norm)     
     if netG == 'global':    
         netG = GlobalGenerator(input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, norm_layer, ndim=ndim,  use_dropout=use_dropout) 
@@ -514,9 +515,9 @@ class ResnetGenerator(ModelBase_Blocks):
 
         self.model = nn.Sequential(*model)
 
-    def forward(self, input):
+    def forward(self, x):
         """Standard forward"""
-        return self.model(input)
+        return self.model(x)
 
 
 class ResnetBlock(ModelBase_Blocks):
@@ -598,17 +599,19 @@ class UnetGenerator(ModelBase_Blocks):
         ModelBase_Blocks.__init__(self, ndim, norm_layer)
         # construct unet structure
         unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True, ndim=ndim)  # add the innermost layer
+        k=0
         for i in range(num_downs - 5):          # add intermediate layers with ngf * 8 filters
             unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout, ndim=ndim)
+            k=i
         # gradually reduce the number of filters from ngf * 8 to ngf
         unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, ndim=ndim)
         unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer, ndim=ndim)
         unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer, ndim=ndim)
         self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer, ndim=ndim)  # add the outermost layer
 
-    def forward(self, input):
+    def forward(self, x):
         """Standard forward"""
-        return self.model(input)
+        return self.model(x)
 
 
 class UnetSkipConnectionBlock(ModelBase_Blocks):
@@ -724,9 +727,9 @@ class NLayerDiscriminator(ModelBase_Blocks):
         sequence += [self.Conv(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
         self.model = nn.Sequential(*sequence)
 
-    def forward(self, input):
+    def forward(self, x):
         """Standard forward."""
-        return self.model(input)
+        return self.model(x)
 
 
 class PixelDiscriminator(ModelBase_Blocks):
@@ -756,9 +759,9 @@ class PixelDiscriminator(ModelBase_Blocks):
 
         self.net = nn.Sequential(*self.net)
 
-    def forward(self, input):
+    def forward(self, x):
         """Standard forward."""
-        return self.net(input)
+        return self.net(x)
     
     
     
@@ -805,9 +808,9 @@ class LocalEnhancer(ModelBase_Blocks):
         
         self.downsample = self.AvgPool(3, stride=2, padding=[1, 1], count_include_pad=False)
 
-    def forward(self, input): 
+    def forward(self, x): 
         ### create input pyramid
-        input_downsampled = [input]
+        input_downsampled = [x]
         for i in range(self.n_local_enhancers):
             input_downsampled.append(self.downsample(input_downsampled[-1]))
 
@@ -855,8 +858,8 @@ class GlobalGenerator(ModelBase_Blocks):
         model += [self.ReflectionPad(3), self.Conv(ngf, output_nc, kernel_size=7, padding=0), nn.Tanh()]        
         self.model = nn.Sequential(*model)
             
-    def forward(self, input):
-        return self.model(input)   
+    def forward(self, x):
+        return self.model(x)   
     
 class Encoder(ModelBase_Blocks):
     def __init__(self, input_nc, output_nc, ngf=32, n_downsampling=4, norm_layer=nn.BatchNorm2d, ndim=2, use_dropout=False):
@@ -880,14 +883,14 @@ class Encoder(ModelBase_Blocks):
         model += [self.ReflectionPad(3), self.Conv(ngf, output_nc, kernel_size=7, padding=0), nn.Tanh()]
         self.model = nn.Sequential(*model) 
 
-    def forward(self, input, inst):
-        outputs = self.model(input)
+    def forward(self, x, inst):
+        outputs = self.model(x)
 
         # instance-wise average pooling
         outputs_mean = outputs.clone()
         inst_list = np.unique(inst.cpu().numpy().astype(int))        
         for i in inst_list:
-            for b in range(input.size()[0]):
+            for b in range(x.size()[0]):
                 indices = (inst[b:b+1] == int(i)).nonzero() # n x 4            
                 for j in range(self.output_nc):
                     output_ins = outputs[indices[:,0] + b, indices[:,1] + j, indices[:,2], indices[:,3]]                    
@@ -913,19 +916,19 @@ class MultiscaleDiscriminator(ModelBase_Blocks):
 
         self.downsample = self.AvgPool(3, stride=2, padding=[1, 1], count_include_pad=False)
 
-    def singleD_forward(self, model, input):
+    def singleD_forward(self, model, x):
         if self.getIntermFeat:
-            result = [input]
+            result = [x]
             for i in range(len(model)):
                 result.append(model[i](result[-1]))
             return result[1:]
         else:
-            return [model(input)]
+            return [model(x)]
 
-    def forward(self, input):        
+    def forward(self, x):        
         num_D = self.num_D
         result = []
-        input_downsampled = input
+        input_downsampled = x
         for i in range(num_D):
             if self.getIntermFeat:
                 model = [getattr(self, 'scale'+str(num_D-1-i)+'_layer'+str(j)) for j in range(self.n_layers+2)]
@@ -944,19 +947,20 @@ class DCGANDiscriminator(ModelBase_Blocks):
         parameters, input_nc, ndf, norm_layer=nn.BatchNorm2d, ndim=2
     ):
         ModelBase_Blocks.__init__(self, ndim, norm_layer)
-
+        
+        if norm_layer!=None:
+            bn=True
+        else:
+            bn=False
 
         def discriminator_block(in_filters, out_filters, bn=True):
             block = [self.Conv(in_filters, out_filters, 3, 2, 1), nn.LeakyReLU(0.2, inplace=True), self.Dropout(0.25)]
             if bn:
                 block.append(norm_layer(out_filters, 0.8))
             return block
-        if norm_layer!=None:
-            bn=True
-        else:
-            bn=False
+        
         self.model = nn.Sequential(
-            *discriminator_block(input_nc, 16, bn=False),
+            *discriminator_block(input_nc, 16, bn),
             *discriminator_block(16, 32),
             *discriminator_block(32, 64),
             *discriminator_block(64, 128),

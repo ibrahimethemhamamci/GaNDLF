@@ -1,7 +1,6 @@
 import torch
 from torchmetrics import FID, SSIM, LPIPS
 from skimage.metrics import normalized_mutual_information 
-import numpy as np
 
 def generic_torchmetrics_score(output, label, metric_class, metric_key, params):
     #num_classes = params["model"]["num_classes"]

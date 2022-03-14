@@ -1,10 +1,7 @@
 import torch
 from .modelBase import ModelBase
 from . import networks
-from GANDLF.utils import send_model_to_device
-from GANDLF.schedulers import global_schedulers_dict
 from GANDLF.optimizers import global_optimizer_dict
-import matplotlib.pyplot as plt
 
 
 class pix2pix(ModelBase):
@@ -39,7 +36,11 @@ class pix2pix(ModelBase):
         self.optimizer_D= global_optimizer_dict[parameters["optimizer"]["type"]](parameters)
 
         self.optimizer_list=[self.optimizer_G,self.optimizer_D]
-        self.lambda_L1= parameters["model"]["lambda"]
+        try:
+            self.lambda_L1= parameters["model"]["lambda"]
+        except KeyError:
+            self.lambda_L1 = 10.0
+            
         print("LAMBDA:",self.lambda_L1)
         
         # Here 2 different optimizer can be defined if necessary.
@@ -61,7 +62,6 @@ class pix2pix(ModelBase):
 
     def forward(self):
         self.fake_B = self.netG(self.real_A)  # G(A)
-        import cv2
 
         
     def return_optimizers(self):
@@ -149,7 +149,8 @@ class pix2pix(ModelBase):
         else:
             print("Unrecognized argument for mode while returning loss names!!")
             
-    def preprocess(self,img,label):
+    @staticmethod        
+    def preprocess(img,label):
         img=img/255.0
         label=label.float()
         label=label/255.0

@@ -12,7 +12,7 @@ from torchio.transforms import (
 import SimpleITK as sitk
 from tqdm import tqdm
 
-from GANDLF.utils import perform_sanity_check_on_subject
+from GANDLF.utils import perform_sanity_check_on_subject, resize_image
 from .preprocessing import global_preprocessing_dict, Resample_Minimum
 from .augmentation import global_augs_dict
 
@@ -34,6 +34,7 @@ def ImagesFromDataFrame(
 ):
     """
     Reads the pandas dataframe and gives the dataloader to use for training/validation/testing
+
     Parameters
     ----------
     dataframe : pandas.DataFrame
@@ -73,9 +74,8 @@ def ImagesFromDataFrame(
             style = False
         else:
             style = True
-    except:
+    except KeyError:
         style = True
-
 
     # Finding the dimension of the dataframe for computational purposes later
     num_row, num_col = dataframe.shape
@@ -84,6 +84,7 @@ def ImagesFromDataFrame(
     dataframe.index = range(0, num_row)
     # This list will later contain the list of subjects
     subjects_list = []
+    subjects_with_error = []
 
     channelHeaders = headers["channelHeaders"]
     labelHeader = headers["labelHeader"]
@@ -97,6 +98,16 @@ def ImagesFromDataFrame(
     else:
         sampler = sampler.lower()  # for easier parsing
         sampler_padding = "symmetric"
+
+    resize_images_flag = False
+    # if resize has been defined but resample is not (or is none)
+    if not (preprocessing is None):
+        for key in preprocessing.keys():
+            # check for different resizing keys
+            if key in ["resize_image", "resize_images"]:
+                if not (preprocessing[key] is None):
+                    resize_images_flag = True
+                    break
 
     # iterating through the dataframe
     for patient in tqdm(
@@ -122,10 +133,18 @@ def ImagesFromDataFrame(
                 file_reader = sitk.ImageFileReader()
                 file_reader.SetFileName(dataframe[channel][patient])
                 file_reader.ReadImageInformation()
-
                 subject_dict["spacing"] = torch.Tensor(file_reader.GetSpacing())
 
-        # # for regression
+            # if resize_image is requested, the perform per-image resize with appropriate interpolator
+            if resize_images_flag:
+                img_resized = resize_image(
+                    subject_dict[str(channel)].as_sitk(), preprocessing["resize_image"]
+                )
+                # always ensure resized image spacing is used
+                subject_dict["spacing"] = torch.Tensor(img_resized.GetSpacing())
+                subject_dict[str(channel)] = torchio.ScalarImage.from_sitk(img_resized)
+
+        # # for regression -- this logic needs to be thought through
         # if predictionHeaders:
         #     # get the mask
         #     if (subject_dict['label'] is None) and (class_list is not None):
@@ -137,11 +156,22 @@ def ImagesFromDataFrame(
 
             subject_dict["label"] = torchio.LabelMap(dataframe[labelHeader][patient])
             subject_dict["path_to_metadata"] = str(dataframe[labelHeader][patient])
+
+            # if resize is requested, the perform per-image resize with appropriate interpolator
+            if resize_images_flag:
+                img_resized = resize_image(
+                    subject_dict["label"].as_sitk(),
+                    preprocessing["resize_image"],
+                    sitk.sitkNearestNeighbor,
+                )
+                subject_dict["label"] = torchio.LabelMap.from_sitk(img_resized)
+        
         elif labelHeader is not None and style == False:
             subject_dict["label"] = torchio.ScalarImage(
                 dataframe[channel][patient]
             )
             subject_dict["path_to_metadata"] = str(dataframe[channel][patient])
+
 
         else:
             subject_dict["label"] = "NA"
@@ -168,7 +198,11 @@ def ImagesFromDataFrame(
                     + subject["subject_id"]
                     + "'"
                 )
-            perform_sanity_check_on_subject(subject, parameters, style)
+            try:
+                perform_sanity_check_on_subject(subject, parameters)
+            except Exception as e:
+                print(e)
+                subjects_with_error.append(subject["subject_id"])
 
             # # padding image, but only for label sampler, because we don't want to pad for uniform
             if "label" in sampler or "weight" in sampler:
@@ -187,8 +221,16 @@ def ImagesFromDataFrame(
             # Appending this subject to the list of subjects
             subjects_list.append(subject)
 
+    if subjects_with_error:
+        raise ValueError(
+            "The following subjects could not be loaded, please recheck or remove and retry:",
+            subjects_with_error,
+        )
+
     transformations_list = []
+    
     Chestxray = parameters["Chestxray"] ##temporary for chestxray project
+
     # augmentations are applied to the training set only
     if (train or Chestxray) and not (augmentations == None):
         for aug in augmentations:
@@ -207,6 +249,9 @@ def ImagesFromDataFrame(
             # special check for resample
             if preprocess_lower == "resize":
                 resize_values = tuple(preprocessing["resize"])
+                transformations_list.append(torchio.Resize(resize_values))
+            elif preprocess_lower == "resize_patch":
+                resize_values = tuple(preprocessing["resize_patch"])
                 transformations_list.append(torchio.Resize(resize_values))
             elif preprocess_lower == "resample":
                 if "resolution" in preprocessing[preprocess_lower]:

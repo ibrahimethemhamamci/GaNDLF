@@ -1,12 +1,9 @@
 import torch
 from .modelBase import ModelBase
 from . import networks
-from GANDLF.utils import send_model_to_device
 from GANDLF.utils import ImagePool
 
-from GANDLF.schedulers import global_schedulers_dict
 from GANDLF.optimizers import global_optimizer_dict
-import matplotlib.pyplot as plt
 #from ..utils.image_pool import ImagePool
 import itertools
 
@@ -21,7 +18,23 @@ class cycleGAN(ModelBase):
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names_A = ['real_A', 'fake_B', 'rec_A']
         self.visual_names_B = ['real_B', 'fake_A', 'rec_B']
-
+        
+        try:
+            self.lambda_LA= parameters["model"]["lambda_A"]
+        except KeyError:
+            self.lambda_LA = 10.0
+        
+        try:
+            self.lambda_LB= parameters["model"]["lambda_B"]
+        except KeyError:
+            self.lambda_LB = 10.0
+            
+        try:
+            self.lambda_identity= parameters["model"]["lambda_I"]
+        except KeyError:
+            self.lambda_identity = 5.0
+        
+            
         self.lambda_LA= parameters["model"]["lambda_A"]
         self.lambda_LB= parameters["model"]["lambda_B"]
         self.lambda_identity= parameters["model"]["lambda_I"]
@@ -48,7 +61,7 @@ class cycleGAN(ModelBase):
         self.criterionL1 = torch.nn.L1Loss().to(self.device)
         try:
             self.pool_size=parameters["model"]["pool_size"]
-        except:
+        except KeyError:
             self.pool_size=50
         #initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
         parameters["model_parameters"] = itertools.chain(self.netG_A.parameters(), self.netG_B.parameters())
@@ -99,10 +112,6 @@ class cycleGAN(ModelBase):
         self.rec_A = self.netG_B(self.fake_B)   # G_B(G_A(A))
         self.fake_A = self.netG_B(self.real_B)  # G_B(B)
         self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B))
-        img=(self.fake_A[0]+1)/2 * 255
-        img = img.reshape(512,512)
-        import cv2
-        cv2.imwrite("./test2.png", img.cpu().detach().numpy())
                     
     def return_optimizers(self):
         return self.optimizer_list
@@ -223,8 +232,8 @@ class cycleGAN(ModelBase):
             return self.test_loss_names
         else:
             print("Unrecognized argument for mode while returning loss names!!")
-            
-    def preprocess(self,img,label):
+    @staticmethod       
+    def preprocess(img,label):
         label = label.float()
         img=(2*img/255.0)-1
         label=(2*label/255.0)-1

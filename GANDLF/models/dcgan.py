@@ -1,10 +1,7 @@
 import torch
 from .modelBase import ModelBase
 from . import networks
-from GANDLF.utils import send_model_to_device
-from GANDLF.schedulers import global_schedulers_dict
 from GANDLF.optimizers import global_optimizer_dict
-import matplotlib.pyplot as plt
 
 
 class dcgan(ModelBase):
@@ -57,7 +54,7 @@ class dcgan(ModelBase):
 
         
 
-    def set_input(self, label):
+    def set_input(label):
         
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
@@ -177,7 +174,7 @@ class dcgan(ModelBase):
             return self.test_loss_names
         else:
             print("Unrecognized argument for mode while returning loss names!!")
-            
-    def preprocess(self,img):
+    @staticmethod
+    def preprocess(img):
         img=img/255.0
         return img

@@ -10,13 +10,13 @@ from .segmentation import (
     hd95,
     hd95_per_label,
 )
-from .GAN import FID_score, SSIM_score, LPIPS_score, NMI_score
 from .regression import classification_accuracy, balanced_acc_score
 from .generic import recall_score, precision_score, iou_score, f1_score, accuracy
+from .GAN import FID_score, SSIM_score, LPIPS_score, NMI_score
+
 
 
 # global defines for the metrics
-
 global_metrics_dict = {
     "dice": multi_class_dice,
     "dice_per_label": multi_class_dice_per_label,
@@ -41,4 +41,5 @@ global_metrics_dict = {
     "ssim": SSIM_score,
     "lpips": LPIPS_score,
     "nmi": NMI_score,
+
 }

@@ -1,11 +1,10 @@
-import os, math, time
 import torch
 from torch.utils.data import DataLoader
 from GANDLF.schedulers import global_schedulers_dict
 from tqdm import tqdm
 import torchio
 from medcam import medcam
-import numpy as np
+import os, time
 
 from GANDLF.data.ImagesFromDataFrame import ImagesFromDataFrame
 from GANDLF.grad_clipping.grad_scaler import GradScaler, model_parameters_exclude_head
@@ -13,12 +12,11 @@ from GANDLF.grad_clipping.clip_gradients import dispatch_clip_grad_
 from GANDLF.models import global_gan_models_dict
 from GANDLF.utils import (
     get_date_time,
-    send_model_to_device,
     populate_channel_keys_in_params,
     get_class_imbalance_weights,
 )
-from GANDLF.logger_GAN import Logger
-from .step import step
+from GANDLF.logger import Logger_GAN as Logger
+from .step import step_GAN as step
 from .forward_pass import validate_network
 
 # hides torchio citation request, see https://github.com/fepegar/torchio/issues/235
@@ -49,15 +47,10 @@ def train_network(model, train_dataloader, opt_list, params):
 
     """
     print("*" * 20)
-    print("Starting Training : ")
+    print("Starting Training: ")
     print("*" * 20)
     # Initialize a few things
     
-    
-    total_epoch_train_metric = {}
- 
-    average_epoch_train_metric = {}
-
     """for metric in params["metrics"]:
         total_epoch_train_metric[metric] = 0"""
 
@@ -99,6 +92,7 @@ def train_network(model, train_dataloader, opt_list, params):
         
         
         loss,loss_names, _ = step(params, model, image, label)
+        print(loss_names)
         try:
             total_epoch_train_loss
         except NameError:
@@ -106,7 +100,7 @@ def train_network(model, train_dataloader, opt_list, params):
         else:
             pass
         nan_loss = []
-        for i in range(len(loss)):
+        for i, num in enumerate(loss):
             nan_loss.append(torch.isnan(loss[i]))
         second_order=[]
         for optimizer in opt_list:
@@ -119,7 +113,7 @@ def train_network(model, train_dataloader, opt_list, params):
             with torch.cuda.amp.autocast():
                 # if loss is nan, don't backprop and don't step optimizer
                 if not nan_loss:
-                    for i in range(len(second_order)):
+                    for i, num in enumerate(second_order):
                         scaler(
                             loss=loss[i],
                             optimizer=opt_list[i],
@@ -131,18 +125,18 @@ def train_network(model, train_dataloader, opt_list, params):
                             create_graph=second_order[i],
                         )
         else:
-                for i in range(len(loss)):
-                    if not nan_loss[i]:
-                        #loss[i].backward(create_graph=second_order[i])
-                        if params["clip_grad"] is not None:
-                            dispatch_clip_grad_(
-                                parameters=model_parameters_exclude_head(
-                                    model, clip_mode=params["clip_mode"]
+            for i, num in enumerate(loss):
+                if not nan_loss[i]:
+                    #loss[i].backward(create_graph=second_order[i])
+                    if params["clip_grad"] is not None:
+                        dispatch_clip_grad_(
+                            parameters=model_parameters_exclude_head(
+                                model, clip_mode=params["clip_mode"]
                                 ),
                                 value=params["clip_grad"],
                                 mode=params["clip_mode"],
                             )
-                        nan_loss[i] = False
+                    nan_loss[i] = False
                 #optimizer.step()
                 model.optimize_parameters()
 
@@ -150,9 +144,9 @@ def train_network(model, train_dataloader, opt_list, params):
         # Non network training related
 
         
-        for i in range(len(nan_loss)):
+        for i, num in enumerate(nan_loss):
             if not nan_loss[i]:
-                for i in range(len(loss)):
+                for i, num in enumerate(loss):
                     total_epoch_train_loss[i] += loss[i].cpu().data.item()
         #for metric in calculated_metrics.keys():
         #    total_epoch_train_metric[metric] += calculated_metrics[metric]
@@ -297,7 +291,7 @@ def training_loop_GAN(
             params["scheduler"]["step_size"] = (
                 params["training_samples_size"] / params["learning_rate"])
     scheduler_list=[]
-    for i in range(len(opt_list)):
+    for i, num in enumerate(opt_list):
         params["optimizer_object"] = opt_list[i]
         scheduler_list.append(global_schedulers_dict[params["scheduler"]["type"]](params))
     
@@ -337,7 +331,7 @@ def training_loop_GAN(
     
     train_logger.write_header(loss_names_train,mode="train")
     valid_logger.write_header(loss_names_val, mode="valid")
-    test_logger.write_header(loss_names_val, mode="test")
+    test_logger.write_header(loss_names_test, mode="test")
 
     #model, params["model"]["amp"], device = send_model_to_device(
     #    model, amp=params["model"]["amp"], device=params["device"], optimizer=optimizer
@@ -372,11 +366,10 @@ def training_loop_GAN(
             main_dict = torch.load(best_model_path)
             model.load_state_dict(main_dict["model_state_dict"])
             start_epoch = main_dict["epoch"]
-            optimizer.load_state_dict(main_dict["optimizer_state_dict"])
             best_loss = main_dict["best_loss"]
             print("Previous model loaded successfully.")
-        except Exception as e:
-            print("Previous model could not be loaded, error: ", e)
+        except IOError:
+            raise IOError("Previous model could not be loaded, error: ")
 
     print("Using device:", device, flush=True)
 
@@ -487,7 +480,7 @@ if __name__ == "__main__":
     else:
         testingDataFromPickle = pandas.read_pickle(testingData_str)
 
-    training_loop(
+    training_loop_GAN(
         training_data=trainingDataFromPickle,
         validation_data=validationDataFromPickle,
         output_dir=args.outputDir,

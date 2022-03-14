@@ -41,6 +41,7 @@ global_models_dict = {
     "densenet264": densenet264,
     "msdnet": MSDNet,
     "brain_age": brainage,
+    "sdnet": SDNet,
     "resnet18": resnet18,
     "resnet34": resnet34,
     "resnet50": resnet50,
@@ -54,5 +55,4 @@ global_gan_models_dict = {
     "pix2pixHD": pix2pixHD,
     "cycleGAN": cycleGAN,
     "dcgan": dcgan,
-    "sdnet": SDNet,
 }

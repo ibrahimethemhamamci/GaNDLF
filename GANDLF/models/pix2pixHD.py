@@ -2,11 +2,10 @@ import torch
 from .modelBase import ModelBase
 from . import networks
 #from GANDLF.utils import send_model_to_device
-from GANDLF.schedulers import global_schedulers_dict
 from GANDLF.optimizers import global_optimizer_dict
-import matplotlib.pyplot as plt
 from torch.autograd import Variable
-import cv2
+import os
+import numpy as np
 
 class pix2pixHD(ModelBase):
 
@@ -67,7 +66,10 @@ class pix2pixHD(ModelBase):
         self.optimizer_D= global_optimizer_dict[parameters["optimizer"]["type"]](parameters)
 
         self.optimizer_list=[self.optimizer_G,self.optimizer_D]
-        self.lambda_L1= parameters["model"]["lambda"]
+        try:
+            self.lambda_L1= parameters["model"]["lambda"]
+        except KeyError:
+            self.lambda_L1 = 10.0
         print("LAMBDA:",self.lambda_L1)
         print(self.optimizer_D==self.optimizer_G)
         
@@ -78,27 +80,13 @@ class pix2pixHD(ModelBase):
     
 
     def set_input(self, image, label):
-        
-    
 
-        import cv2
-        #label =torch.cat((label,label,label),1)
-        #image = torch.cat((image,image,image),1)
-        self.real_A = image.to(self.device)
-        
-        
+        self.real_A = image.to(self.device)    
         self.real_B = label.to(self.device)
-        #img1=self.real_A[0][0]*255
-        #img2=self.real_B[0][0]*255
-       # cv2.imwrite(img1, self.real_A.cpu().detach().numpy())
-       # cv2.imwrite(img2, self.real_A.cpu().detach().numpy())
-        
-        #self.real_A=transform(self.real_A)
 
     def forward(self):
-        input_label, inst_map, real_image, feat_map = self.encode_input(self.real_B,real_image=self.real_A)  
-
-                   
+        input_label, _ , real_image, feat_map = self.encode_input(self.real_B,real_image=self.real_A)
+        
         input_concat = input_label
         self.fake_B = self.netG.forward(input_concat)
 
@@ -286,19 +274,10 @@ class pix2pixHD(ModelBase):
             return edge.half()
         else:
             return edge.float()
-                                         
-    def preprocess(self,img,label):
+    
+    @staticmethod
+    def preprocess(img,label):
         img=img/255.0
         label=label.float()
         label=label/255.0
-        
-        
-        imgout = img[0][0]*255
-        imgout = imgout.int()
-        cv2.imwrite("test.jpg", imgout.cpu().detach().numpy())
-        lout = label[0][0]*255
-        lout = lout.int()
-        cv2.imwrite("test2.jpg", lout.cpu().detach().numpy())
-        
         return img,label
-         

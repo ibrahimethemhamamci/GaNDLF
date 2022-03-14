@@ -17,10 +17,7 @@ def writeTrainingCSV(inputDir, channelsID, labelID, outputFile):
     outputToWrite = "SubjectID,"
     for i, n in enumerate(channelsID_list):
         outputToWrite = outputToWrite + "Channel_" + str(i) + ","
-    if labelID != "None":
-        outputToWrite = outputToWrite + "Label"
-    else:
-        pass
+    outputToWrite = outputToWrite + "Label"
     outputToWrite = outputToWrite + "\n"
 
     # iterate over all subject directories
