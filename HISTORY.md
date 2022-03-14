@@ -3,6 +3,17 @@
 - Add an option (`"save_training"`) to save training patches
 - Add option to save per-label segmentation metrics
 - Separate `"motion"` artifact
+- `DenseNet` now supports `InstanceNorm`
+- Updated implementations of `VGG` and `DenseNet` to use `ModelBase` for consistency
+- Model saving now includes the git commit hash
+- Added FAQ in documentation
+- Accuracy is now standardized from `torchmetrics`
+- New post-processing module added
+- Anonymization module has been added
+- More progress bars added for better feedback
+- NIfTI conversion added in anonymization
+- Using TiffSlide instead of OpenSlide
+- Minimum resampling resolution is now available
 
 ## 0.0.13
 

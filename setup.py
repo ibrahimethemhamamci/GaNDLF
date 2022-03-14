@@ -2,10 +2,39 @@
 
 """The setup script."""
 
+
+import os
 from setuptools import setup, find_packages
+from setuptools.command.install import install
+from setuptools.command.develop import develop
+from setuptools.command.egg_info import egg_info
 
 with open("README.md") as readme_file:
     readme = readme_file.read()
+
+
+def git_submodule_update():
+    ## submodule update
+    os.system("git submodule update --init --recursive")
+
+
+class CustomInstallCommand(install):
+    def run(self):
+        install.run(self)
+        git_submodule_update()
+
+
+class CustomDevelopCommand(develop):
+    def run(self):
+        develop.run(self)
+        git_submodule_update()
+
+
+class CustomEggInfoCommand(egg_info):
+    def run(self):
+        egg_info.run(self)
+        git_submodule_update()
+
 
 # read version.py
 import sys, re
@@ -20,47 +49,60 @@ except Exception as error:
     sys.stderr.write("Warning: Could not open '%s' due %s\n" % (filepath, error))
 
 requirements = [
-    "numpy==1.19.2",
+    "black",
+    "numpy==1.21.0",
     "scipy",
-    "SimpleITK==2.1.0",
+    "SimpleITK!=2.0.*",
     "torch>=1.7",
     "torchvision",
     "tqdm",
     "torchio==0.18.57",
     "pandas",
     "pylint",
-    "scikit-learn==0.23.1",
-    "pickle5==0.0.11",
+    "scikit-learn>=0.23.2",
+    "pickle5>=0.0.11",
     "setuptools",
     "seaborn",
     "pyyaml",
-    "openslide-python",
     "scikit-image>=0.19.0",
+    "tiffslide",
     "matplotlib",
     "requests>=2.25.0",
     "pyvips",
     "pytest",
     "coverage",
+    "pytest-cov",
     "psutil",
     "medcam",
+    "torchmetrics",
+    "lpips",
+    "opencv-python",
     "torchmetrics >= 0.6.2",
-    "lpips", #lpips should be downloaded as well
     "OpenPatchMiner==0.1.6",
+    "zarr==2.10.3",
+    "pydicom",
 ]
 
 setup(
     name="GANDLF",
     version=__version__,
-    author="Jose Agraz, Vinayak Ahluwalia, Bhakti Baheti, Spyridon Bakas, Ujjwal Baid, Megh Bhalerao, Brandon Edwards, Karol Gotkowski, Caleb Grenko, Orhun Güley, Sarthak Pati, Micah Sheller, Juliia Skobleva, Siddhesh Thakur, Spiros Thermos",  # alphabetical order
+    author="Jose Agraz, Vinayak Ahluwalia, Bhakti Baheti, Spyridon Bakas, Ujjwal Baid, Megh Bhalerao, Brandon Edwards, Karol Gotkowski, Caleb Grenko, Orhun Güley, Ibrahim Ethem Hamamci, Sarthak Pati, Micah Sheller, Juliia Skobleva, Siddhesh Thakur, Spiros Thermos",  # alphabetical order
     author_email="software@cbica.upenn.edu",
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     packages=find_packages(),
+    cmdclass={  # this ensures git_submodule_update is called during install
+        "install": CustomInstallCommand,
+        "develop": CustomDevelopCommand,
+        "egg_info": CustomEggInfoCommand,
+    },
     scripts=[
         "gandlf_run",
         "gandlf_constructCSV",
         "gandlf_collectStats",
         "gandlf_patchMiner",
         "gandlf_preprocess",
+        "gandlf_anonymizer",
+        "gandlf_verifyInstall",
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -68,7 +110,6 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Natural Language :: English",
         "Operating System :: OS Independent",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
@@ -85,11 +126,6 @@ setup(
     keywords="semantic, segmentation, regression, classification, data-augmentation, medical-imaging",
     zip_safe=False,
 )
-
-import os
-
-## submodule update
-os.system("git submodule update --init --recursive")
 
 ## windows vips installation
 if os.name == "nt":  # proceed for windows

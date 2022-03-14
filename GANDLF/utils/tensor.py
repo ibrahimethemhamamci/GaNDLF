@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchio
+from tqdm import tqdm
 
 
 def one_hot(segmask_array, class_list):
@@ -183,13 +184,13 @@ def send_model_to_device(model, amp, device, optimizer):
             print(
                 "Memory Total : ",
                 round(
-                    torch.cuda.get_device_properties(dev_int).total_memory / 1024 ** 3,
+                    torch.cuda.get_device_properties(dev_int).total_memory / 1024**3,
                     1,
                 ),
                 "GB, Allocated: ",
-                round(torch.cuda.memory_allocated(dev_int) / 1024 ** 3, 1),
+                round(torch.cuda.memory_allocated(dev_int) / 1024**3, 1),
                 "GB, Cached: ",
-                round(torch.cuda.memory_reserved(dev_int) / 1024 ** 3, 1),
+                round(torch.cuda.memory_reserved(dev_int) / 1024**3, 1),
                 "GB",
             )
 
@@ -245,8 +246,9 @@ def get_class_imbalance_weights(training_data_loader, parameters):
     # For regression dice penalty need not be taken account
     # For classification this should be calculated on the basis of predicted labels and mask
     # iterate through full penalty data
-    for _, (subject) in enumerate(penalty_loader):
-
+    for _, (subject) in enumerate(
+        tqdm(penalty_loader, desc="Looping over training data for penalty calculation")
+    ):
         # segmentation needs masks to be one-hot encoded
         if parameters["problem_type"] == "segmentation":
             # accumulate dice weights for each label
@@ -290,21 +292,3 @@ def get_class_imbalance_weights(training_data_loader, parameters):
     }
 
     return penalty_dict, weights_dict
-
-
-def get_linear_interpolation_mode(dimensionality):
-    """
-    Get linear interpolation mode.
-    Args:
-        dimensionality (int): The dimensions based on which interpolation mode is calculated
-    Returns:
-        str: Interpolation type to pass to interpolation function
-    """
-
-    mode = "nearest"
-    if dimensionality == 2:
-        mode = "bilinear"
-    elif dimensionality == 3:
-        mode = "trilinear"
-
-    return mode

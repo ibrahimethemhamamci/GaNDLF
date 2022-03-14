@@ -99,7 +99,6 @@ def train_network(model, train_dataloader, opt_list, params):
         
         
         loss,loss_names, _ = step(params, model, image, label)
-        print(loss_names)
         try:
             total_epoch_train_loss
         except NameError:

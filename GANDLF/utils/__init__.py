@@ -4,8 +4,6 @@ import os
 os.environ["TORCHIO_HIDE_CITATION_PROMPT"] = "1"
 
 from .imaging import (
-    resample_image,
-    resize_image,
     perform_sanity_check_on_subject,
     write_training_patches,
 )
@@ -19,7 +17,6 @@ from .tensor import (
     reverse_one_hot,
     send_model_to_device,
     get_class_imbalance_weights,
-    get_linear_interpolation_mode,
 )
 
 from .write_parse import (
@@ -27,24 +24,17 @@ from .write_parse import (
     parseTrainingCSV,
 )
 
-
-
 from .generic import (
     fix_paths,
     get_date_time,
     get_filename_extension_sanitized,
     version_check,
+    is_GAN,
 )
 
 from .modelio import (
     load_model,
     save_model,
-)
-
-
-
-from .isGAN import(
-    is_GAN,
 )
 
 from .parameter_processing import (

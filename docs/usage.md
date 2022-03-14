@@ -11,6 +11,9 @@ GaNDLF tackles all of these and the details are split in the manner explained in
 - [Usage](#usage)
   - [Table of Contents](#table-of-contents)
   - [Preparing the Data](#preparing-the-data)
+    - [Anonymize Data](#anonymize-data)
+    - [Cleanup/Harmonize Data](#cleanupharmonize-data)
+    - [Offline Patch Extraction (for histology images only)](#offline-patch-extraction-for-histology-images-only)
     - [Running preprocessing before training/inference](#running-preprocessing-before-traininginference)
   - [Constructing the Data CSV](#constructing-the-data-csv)
   - [Customize the Training](#customize-the-training)
@@ -18,8 +21,22 @@ GaNDLF tackles all of these and the details are split in the manner explained in
   - [Plot the final results](#plot-the-final-results)
     - [Multi-GPU systems](#multi-gpu-systems)
   - [M3D-CAM usage](#m3d-cam-usage)
+  - [Examples](#examples)
 
 ## Preparing the Data
+
+### Anonymize Data
+
+GaNDLF can anonymize single images or a collection of images using the `gandlf_anonymizer` script. The usage is as follows:
+```bash
+python gandlf_anonymizer
+  # -h, --help         show help message and exit
+  -c ./samples/config_anonymizer.yaml \ # anonymizer configuration - needs to be a valid YAML (check syntax using https://yamlchecker.com/)
+  -i ./input_dir_or_file \ # input directory containing series of images to anonymize or a single image
+  -o ./output_dir_or_file # output directory to save anonymized images or a single output image file
+```
+
+### Cleanup/Harmonize Data
 
 It is **highly** recommended that the dataset you want to train/infer on has been harmonized:
 
@@ -29,9 +46,11 @@ It is **highly** recommended that the dataset you want to train/infer on has bee
 - Size harmonization: Same physical definition of all images (see https://upenn.box.com/v/spacingsIssue for a presentation on how voxel resolutions affects downstream analyses). This is available via [GaNDLF's preprocessing module](#customize-the-training).
 - Intensity harmonization: Same intensity profile, i.e., normalization [[4](https://doi.org/10.1016/j.nicl.2014.08.008), [5](https://visualstudiomagazine.com/articles/2020/08/04/ml-data-prep-normalization.aspx), [6](https://developers.google.com/machine-learning/data-prep/transform/normalization), [7](https://towardsdatascience.com/understand-data-normalization-in-machine-learning-8ff3062101f0)]. Z-scoring is available via [GaNDLF's preprocessing module](#customize-the-training).
 
-Recommended tool for tackling all aforementioned preprocessing tasks: https://github.com/CBICA/CaPTk
+Recommended tools for tackling all aforementioned preprocessing tasks: 
+- [Cancer Imaging Phenomics Toolkit (CaPTk)](https://github.com/CBICA/CaPTk) 
+- [Federated Tumor Segmentation (FeTS) Front End](https://github.com/FETS-AI/Front-End)
 
-**For Histopathology Only:**
+### Offline Patch Extraction (for histology images only)
 
 GaNDLF can be used to convert a Whole Slide Image (WSI) with or without a corresponding label map to patches using [OPM](https://github.com/CBICA/OPM):
 
@@ -120,6 +139,7 @@ Notes:
 
 [Back To Top &uarr;](#table-of-contents)
 
+
 ## Customize the Training
 
 GaNDLF requires a YAML-based configuration that controls various aspects of the training/inference process, such as:
@@ -157,6 +177,7 @@ Please see a [sample](https://github.com/CBICA/GaNDLF/blob/master/samples/config
 
 [Back To Top &uarr;](#table-of-contents)
 
+
 ## Running GaNDLF (Training/Inference)
 
 ```bash
@@ -173,6 +194,7 @@ python gandlf_run \
 
 [Back To Top &uarr;](#table-of-contents)
 
+
 ## Plot the final results
 
 After the testing/validation training is finished, GaNDLF makes it possible to collect all the statistics from the final models for testing and validation datasets and plot them. The [gandlf_collectStats](https://github.com/CBICA/GaNDLF/blob/master/gandlf_collectStats) can be used for this:
@@ -180,7 +202,7 @@ After the testing/validation training is finished, GaNDLF makes it possible to c
 ```bash
 # continue from previous shell
 python gandlf_collectStats \
-  -i /path/to/trained/models \  # directory which contains testing and validation models
+  -m /path/to/trained/models \  # directory which contains testing and validation models
   -o ./experiment_0/output_dir_stats/  # output directory to save stats and plot
 ```
 
@@ -193,6 +215,7 @@ Please ensure that the environment variable `CUDA_VISIBLE_DEVICES` is set [[ref]
 For an example how this is set, see [sge_wrapper](https://github.com/CBICA/GaNDLF/blob/master/samples/sge_wrapper).
 
 [Back To Top &uarr;](#table-of-contents)
+
 
 ## M3D-CAM usage
 
@@ -219,3 +242,9 @@ The default behavior is "auto" which chooses the last convolutional layer.
 
 All generated attention maps can be found in the experiment output_dir.
 Link to the original repository: https://github.com/MECLabTUDA/M3d-Cam
+
+
+## Examples
+
+- Example data can be found in [the main repo](https://github.com/CBICA/GaNDLF/raw/master/testing/data.zip); this contains both 3D and 2D data that can be used to run various workloads.
+- Configurations can be found in [the main repo](https://github.com/CBICA/GaNDLF/tree/master/testing).

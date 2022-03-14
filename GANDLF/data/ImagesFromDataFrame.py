@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from sklearn.utils import resample
 
 import torch
 import torchio
@@ -9,12 +10,10 @@ from torchio.transforms import (
     Pad,
 )
 import SimpleITK as sitk
+from tqdm import tqdm
 
-from GANDLF.utils import (
-    perform_sanity_check_on_subject,
-    resize_image,
-)
-from .preprocessing import global_preprocessing_dict
+from GANDLF.utils import perform_sanity_check_on_subject
+from .preprocessing import global_preprocessing_dict, Resample_Minimum
 from .augmentation import global_augs_dict
 
 global_sampler_dict = {
@@ -30,7 +29,9 @@ global_sampler_dict = {
 }
 
 # This function takes in a dataframe, with some other parameters and returns the dataloader
-def ImagesFromDataFrame(dataframe, parameters, train):
+def ImagesFromDataFrame(
+    dataframe, parameters, train, apply_zero_crop=False, loader_type=""
+):
     """
     Reads the pandas dataframe and gives the dataloader to use for training/validation/testing
     Parameters
@@ -41,6 +42,11 @@ def ImagesFromDataFrame(dataframe, parameters, train):
         The parameters dictionary
     train : bool
         If the dataloader is for training or not. For training, the patching infrastructure and data augmentation is applied.
+    apply_zero_crop : bool
+        If enabled, the crop_external_zero_plane is applied.
+    loader_type : str
+        Type of loader for printing.
+
     Returns
     -------
     subjects_dataset: torchio.SubjectsDataset
@@ -92,15 +98,10 @@ def ImagesFromDataFrame(dataframe, parameters, train):
         sampler = sampler.lower()  # for easier parsing
         sampler_padding = "symmetric"
 
-    resize_images = False
-    # if resize has been defined but resample is not (or is none)
-    if not (preprocessing is None) and ("resize" in preprocessing):
-        if preprocessing["resize"] is not None:
-            if not ("resample" in preprocessing):
-                resize_images = True
-
     # iterating through the dataframe
-    for patient in range(num_row):
+    for patient in tqdm(
+        range(num_row), desc="Constructing queue for " + loader_type + " data"
+    ):
         # We need this dict for storing the meta data for each subject
         # such as different image modalities, labels, any other data
         subject_dict = {}
@@ -124,14 +125,6 @@ def ImagesFromDataFrame(dataframe, parameters, train):
 
                 subject_dict["spacing"] = torch.Tensor(file_reader.GetSpacing())
 
-            # if resize is requested, the perform per-image resize with appropriate interpolator
-            if resize_images:
-                img = subject_dict[str(channel)].as_sitk()
-                img_resized = resize_image(img, preprocessing["resize"])
-                # always ensure resized image spacing is used
-                subject_dict["spacing"] = torch.Tensor(img_resized.GetSpacing())
-                subject_dict[str(channel)] = torchio.ScalarImage.from_sitk(img_resized)
-
         # # for regression
         # if predictionHeaders:
         #     # get the mask
@@ -143,13 +136,6 @@ def ImagesFromDataFrame(dataframe, parameters, train):
                 skip_subject = True
 
             subject_dict["label"] = torchio.LabelMap(dataframe[labelHeader][patient])
-
-            # if resize is requested, the perform per-image resize with appropriate interpolator
-            if resize_images:
-                img = sitk.ReadImage(str(dataframe[labelHeader][patient]))
-                img_resized = resize_image(img, preprocessing["resize"])
-                subject_dict["label"] = torchio.LabelMap.from_sitk(img_resized)
-
             subject_dict["path_to_metadata"] = str(dataframe[labelHeader][patient])
         elif labelHeader is not None and style == False:
             subject_dict["label"] = torchio.ScalarImage(
@@ -219,24 +205,37 @@ def ImagesFromDataFrame(dataframe, parameters, train):
         for preprocess in preprocessing:
             preprocess_lower = preprocess.lower()
             # special check for resample
-            if preprocess_lower == "resample":
+            if preprocess_lower == "resize":
+                resize_values = tuple(preprocessing["resize"])
+                transformations_list.append(torchio.Resize(resize_values))
+            elif preprocess_lower == "resample":
                 if "resolution" in preprocessing[preprocess_lower]:
-                    # resample_split = str(aug).split(':')
-                    resample_values = tuple(
-                        np.array(preprocessing["resample"]["resolution"]).astype(
-                            np.float
-                        )
+                    # Need to take a look here
+                    resample_values = np.array(
+                        preprocessing[preprocess_lower]["resolution"]
                     )
                     if len(resample_values) == 2:
-                        resample_values = tuple(np.append(resample_values, 1))
+                        resample_values = tuple(
+                            np.append(
+                                np.array(preprocessing[preprocess_lower]["resolution"]),
+                                1,
+                            )
+                        )
                     transformations_list.append(Resample(resample_values))
+            elif preprocess_lower in ["resample_minimum", "resample_min"]:
+                if "resolution" in preprocessing[preprocess_lower]:
+                    transformations_list.append(
+                        Resample_Minimum(
+                            np.array(preprocessing[preprocess_lower]["resolution"])
+                        )
+                    )
             # normalize should be applied at the end
             elif "normalize" in preprocess_lower:
                 if normalize_to_apply is None:
                     normalize_to_apply = global_preprocessing_dict[preprocess_lower]
             # preprocessing routines that we only want for training
             elif preprocess_lower in ["crop_external_zero_planes"]:
-                if train:
+                if train or apply_zero_crop:
                     transformations_list.append(
                         global_preprocessing_dict["crop_external_zero_planes"](
                             patch_size=patch_size
