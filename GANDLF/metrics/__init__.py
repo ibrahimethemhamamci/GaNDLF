@@ -14,6 +14,8 @@ from .regression import classification_accuracy, balanced_acc_score, per_label_a
 from .generic import recall_score, precision_score, iou_score, f1_score, accuracy
 import GANDLF.metrics.classification as classification
 import GANDLF.metrics.regression as regression
+from .GAN import FID_score, SSIM_score, LPIPS_score, NMI_score
+
 
 
 # global defines for the metrics
@@ -38,6 +40,10 @@ global_metrics_dict = {
     "iou": iou_score,
     "balanced_accuracy": balanced_acc_score,
     "per_label_one_hot_accuracy": per_label_accuracy,
+    "fid": FID_score,
+    "ssim": SSIM_score,
+    "lpips": LPIPS_score,
+    "nmi": NMI_score,
 }
 
 

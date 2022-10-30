@@ -29,7 +29,6 @@ def ImagesFromDataFrame(
 ):
     """
     Reads the pandas dataframe and gives the dataloader to use for training/validation/testing
-
     Parameters
     ----------
     dataframe : pandas.DataFrame
@@ -42,7 +41,6 @@ def ImagesFromDataFrame(
         If enabled, the crop_external_zero_plane is applied.
     loader_type : str
         Type of loader for printing.
-
     Returns
     -------
     subjects_dataset: torchio.SubjectsDataset
@@ -62,6 +60,15 @@ def ImagesFromDataFrame(
     preprocessing = parameters["data_preprocessing"]
     in_memory = parameters["in_memory"]
     enable_padding = parameters["enable_padding"]
+    
+    try:
+        style_to_style = parameters["style_to_style"]
+        if style_to_style == False:
+            style = False
+        else:
+            style = True
+    except KeyError:
+        style = True
 
     # Finding the dimension of the dataframe for computational purposes later
     num_row, num_col = dataframe.shape
@@ -137,7 +144,7 @@ def ImagesFromDataFrame(
         #     if (subject_dict['label'] is None) and (class_list is not None):
         #         sys.exit('The \'class_list\' parameter has been defined but a label file is not present for patient: ', patient)
 
-        if labelHeader is not None:
+        if labelHeader is not None and style == True:
             if not os.path.isfile(str(dataframe[labelHeader][patient])):
                 skip_subject = True
 
@@ -152,6 +159,12 @@ def ImagesFromDataFrame(
                     sitk.sitkNearestNeighbor,
                 )
                 subject_dict["label"] = torchio.LabelMap.from_sitk(img_resized)
+        
+        elif labelHeader is not None and style == False:
+            subject_dict["label"] = torchio.ScalarImage(
+                dataframe[channel][patient]
+            )
+            subject_dict["path_to_metadata"] = str(dataframe[channel][patient])
 
         else:
             subject_dict["label"] = "NA"

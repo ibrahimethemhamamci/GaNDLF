@@ -226,7 +226,7 @@ def write_training_patches(subject, params):
             img_to_write,
             os.path.join(training_output_dir_current_subject, "modality_" + key + ext),
         )
-
+    
     if params["label_keys"] is not None:
         img_to_write = torchio.ScalarImage(
             tensor=subject[params["label_keys"][0]][torchio.DATA][0],

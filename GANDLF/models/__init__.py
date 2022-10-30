@@ -34,6 +34,11 @@ from .MSDNet import MSDNet
 from .brain_age import brainage
 from .unetr import unetr
 from .transunet import transunet
+from .pix2pix import pix2pix
+from .pix2pixHD import pix2pixHD
+from .cycleGAN import cycleGAN
+from .dcgan import dcgan
+
 
 # defining dict for models - key is the string and the value is the transform object
 global_models_dict = {
@@ -94,8 +99,15 @@ global_models_dict = {
     "efficientnetb5": efficientnetB5,
     "efficientnetb6": efficientnetB6,
     "efficientnetb7": efficientnetB7,
+    
 }
 
+global_gan_models_dict = {
+    "pix2pix": pix2pix,
+    "pix2pixHD": pix2pixHD,
+    "cycleGAN": cycleGAN,
+    "dcgan": dcgan,
+}
 
 def get_model(params):
     """
@@ -107,4 +119,8 @@ def get_model(params):
     Returns:
         model (torch.nn.Module): The model definition.
     """
-    return global_models_dict[params["model"]["architecture"]](parameters=params)
+    
+    if params["model"]["architecture"] in global_gan_models_dict.keys():
+        return global_gan_models_dict[params["model"]["architecture"]](parameters=params)
+    else:
+        return global_models_dict[params["model"]["architecture"]](parameters=params)

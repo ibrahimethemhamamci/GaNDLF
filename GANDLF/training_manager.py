@@ -3,8 +3,11 @@ import os, sys, pickle, subprocess, shutil
 from sklearn.model_selection import KFold
 from pathlib import Path
 
-from GANDLF.compute import training_loop
 from GANDLF.utils import get_dataframe
+from GANDLF.compute.training_loop import training_loop
+from GANDLF.compute.training_loop import training_loop_GAN
+
+from GANDLF.utils import is_GAN
 
 
 def TrainingManager(dataframe, outputDir, parameters, device, resume, reset):
@@ -22,6 +25,12 @@ def TrainingManager(dataframe, outputDir, parameters, device, resume, reset):
     if reset:
         shutil.rmtree(outputDir)
         Path(outputDir).mkdir(parents=True, exist_ok=True)
+    
+    if is_GAN(parameters["model"]["architecture"]):  # gan mode
+        training_function = training_loop_GAN
+    
+    else:
+        training_function = training_loop
 
     # save the current model configuration as a sanity check
     currentModelConfigPickle = os.path.join(outputDir, "parameters.pkl")
@@ -251,7 +260,7 @@ def TrainingManager(dataframe, outputDir, parameters, device, resume, reset):
 
             # parallel_compute_command is an empty string, thus no parallel computing requested
             if (not parameters["parallel_compute_command"]) or (singleFoldValidation):
-                training_loop(
+                training_function(
                     training_data=trainingData,
                     validation_data=validationData,
                     output_dir=currentValOutputFolder,
@@ -319,6 +328,10 @@ def TrainingManager_split(
         resume (bool): Whether the previous run will be resumed or not.
         reset (bool): Whether the previous run will be reset or not.
     """
+    if is_GAN(parameters["model"]["architecture"]):  # gan mode
+        training_function = training_loop_GAN
+    else:
+        training_function = training_loop
     currentModelConfigPickle = os.path.join(outputDir, "parameters.pkl")
     if (not os.path.exists(currentModelConfigPickle)) or reset or resume:
         with open(currentModelConfigPickle, "wb") as handle:
@@ -332,7 +345,7 @@ def TrainingManager_split(
             )
             parameters = pickle.load(open(currentModelConfigPickle, "rb"))
 
-    training_loop(
+    training_function(
         training_data=dataframe_train,
         validation_data=dataframe_validation,
         output_dir=outputDir,

@@ -99,3 +99,155 @@ def step(model, image, label, params, train=True):
             attention_map = torch.unsqueeze(attention_map, -1)
 
     return loss, metric_output, output, attention_map
+
+
+
+def step_GAN(params, model, image, label=None):
+
+
+    if params["verbose"]:
+        if torch.cuda.is_available():
+            print(torch.cuda.memory_summary())
+        print(
+            "|===========================================================================|"
+        )
+        print(
+            "|                              CPU Utilization                              |"
+        )
+        print("Load_Percent   :", psutil.cpu_percent(interval=None))
+        print("MemUtil_Percent:", psutil.virtual_memory()[2])
+        print(
+            "|===========================================================================|"
+        )
+     
+        
+    if params["model"]["dimension"] == 2:
+        image = torch.squeeze(image, -1)
+        label = torch.squeeze(label, -1)
+        
+    try:
+        style_to_style = params["style_to_style"]
+        if style_to_style==False:
+            style=False
+        else:
+            style=True
+    except KeyError:
+        style=True
+    if style == False:
+        image = model.preprocess(image)
+    else:
+        image,label=model.preprocess(image,label)
+
+    if params["model"]["amp"]:
+        with torch.cuda.amp.autocast():
+            if style==False:
+                inp_arr = torch.zeros(image.shape[0], params["latent_dim"]).normal_(0, 1)
+                output = model.return_generator()(inp_arr)
+            else:
+                output = model.return_generator()(image)
+
+    else:
+        print(list(model.return_generator().parameters())[0].shape)
+        if style==False:
+            inp_arr = torch.zeros(image.shape[0], params["latent_dim"]).normal_(0, 1)
+            output = model.return_generator()(inp_arr)
+        else:
+            output = model.return_generator()(image)
+    if "medcam_enabled" in params and params["medcam_enabled"]:
+        output, attention_map = output
+    # one-hot encoding of 'label' will be needed for segmentation
+    if style==False:
+        model.set_input(image)
+    else:
+        model.set_input(image,label)
+    model.calc_loss()
+    
+    loss, loss_names = model.return_loss()
+    
+
+
+    if len(output) > 1:
+        output = output[0]
+
+    if params["model"]["dimension"] == 2:
+        output = torch.unsqueeze(output, -1)
+        if "medcam_enabled" in params and params["medcam_enabled"]:
+            attention_map = torch.unsqueeze(attention_map, -1)
+
+    if not ("medcam_enabled" in params and params["medcam_enabled"]):
+        return loss, loss_names, output
+    else:
+        return loss, loss_names, output, attention_map
+    
+    
+
+
+
+
+
+
+def step_GAN_forwardpass(model_main, image, label, params, train=False):
+    from .loss_and_metric import get_loss_and_metrics_GAN as get_loss_and_metrics
+    
+    if params["verbose"]:
+        if torch.cuda.is_available():
+            print(torch.cuda.memory_summary())
+        print(
+            "|===========================================================================|"
+        )
+        print(
+            "|                              CPU Utilization                              |"
+        )
+        print("Load_Percent   :", psutil.cpu_percent(interval=None))
+        print("MemUtil_Percent:", psutil.virtual_memory()[2])
+        print(
+            "|===========================================================================|"
+        )
+        
+        if params["model"]["dimension"] == 2:
+            label = torch.squeeze(label, -1)
+
+    if params["model"]["dimension"] == 2:
+        image = torch.squeeze(image, -1)
+        label = torch.squeeze(label, -1)
+        
+    style=True
+    try:
+        style_to_style = params["style_to_style"]
+        if style_to_style==False:
+            style=False
+        else:
+            style=True 
+    except KeyError: 
+        pass
+
+    if style == False:
+        image = torch.zeros(image.shape[0], params["latent_dim"]).normal_(0, 1)
+    else:
+        image,label=model_main.preprocess(image,label)
+
+    model=model_main.return_generator()
+    
+    if params["model"]["amp"]:
+        with torch.cuda.amp.autocast():
+            output = model(image)
+    else:
+        output = model(image)
+    if "medcam_enabled" in params and params["medcam_enabled"]:
+        output, attention_map = output
+  
+    # one-hot encoding of 'label' will probably be needed for segmentation
+    loss, metric_output = get_loss_and_metrics(image, label, output, params)
+
+    if len(output) > 1:
+        output = output[0]
+
+    if params["model"]["dimension"] == 2:
+        output = torch.unsqueeze(output, -1)
+        if "medcam_enabled" in params and params["medcam_enabled"]:
+            attention_map = torch.unsqueeze(attention_map, -1)
+    
+    if not ("medcam_enabled" in params and params["medcam_enabled"]):
+        return loss, metric_output, output
+    else:
+        return loss, metric_output, output, attention_map

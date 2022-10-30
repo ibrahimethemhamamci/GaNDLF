@@ -8,8 +8,11 @@ import torch
 import torchio
 from GANDLF.compute.loss_and_metric import get_loss_and_metrics
 from GANDLF.compute.step import step
+from GANDLF.compute.step import step_GAN_forwardpass
+from GANDLF.compute.loss_and_metric import get_loss_and_metrics_GAN
 from GANDLF.data.post_process import global_postprocessing_dict
 from GANDLF.utils import (
+    is_GAN,
     get_date_time,
     get_filename_extension_sanitized,
     get_unique_timestamp,
@@ -22,8 +25,9 @@ from tqdm import tqdm
 
 
 def validate_network(
-    model, valid_dataloader, scheduler, params, epoch=0, mode="validation"
+    model_main, valid_dataloader, scheduler, params, epoch=0, mode="validation"
 ):
+    
     """
     Function to validate a network for a single epoch
 
@@ -46,6 +50,18 @@ def validate_network(
         Validation metrics for the current epoch
 
     """
+    
+    isGAN=is_GAN(params["model"]["architecture"])
+    if isGAN:  # gan mode
+        model=model_main.return_generator()
+        step_func = step_GAN_forwardpass
+        get_loss_and_metrics_func = get_loss_and_metrics_GAN
+    else:
+        model = model_main
+        step_func = step
+        get_loss_and_metrics_func = get_loss_and_metrics
+
+
     print("*" * 20)
     print("Starting " + mode + " : ")
     print("*" * 20)
@@ -202,7 +218,7 @@ def validate_network(
                     + str(pred_output.cpu().max().item())
                     + "\n"
                 )
-            final_loss, final_metric = get_loss_and_metrics(
+            final_loss, final_metric = get_loss_and_metrics_func(
                 image, valuesToPredict, pred_output, params
             )
 
@@ -290,9 +306,9 @@ def validate_network(
                         )
 
                 if is_inference:
-                    result = step(model, image, None, params, train=False)
+                    result = step_func(model_main, image, None, params, train=False)
                 else:
-                    result = step(model, image, label, params, train=True)
+                    result = step_func(model_main, image, label, params, train=True)
 
                 # get the current attention map and add it to its aggregator
                 if params["medcam_enabled"]:
@@ -301,7 +317,10 @@ def validate_network(
                         attention_map, patches_batch[torchio.LOCATION]
                     )
                 else:
-                    _, _, output, _ = result
+                    if isGAN:
+                        _, _, output = result
+                    else:     
+                        _, _, output, _ = result
 
                 if params["problem_type"] == "segmentation":
                     aggregator.add_batch(
@@ -315,7 +334,7 @@ def validate_network(
                         output_prediction += output
 
             # save outputs
-            if params["problem_type"] == "segmentation":
+            if params["problem_type"] == "segmentation" and not isGAN:
                 output_prediction = aggregator.get_output_tensor()
                 output_prediction = output_prediction.unsqueeze(0)
                 if params["save_output"]:
@@ -346,6 +365,7 @@ def validate_network(
                         )
 
                     # if jpg detected, convert to 8-bit arrays
+                    
                     ext = get_filename_extension_sanitized(subject["1"]["path"][0])
                     if ext in [
                         ".jpg",
@@ -374,6 +394,101 @@ def validate_network(
                             current_output_dir, subject["subject_id"][0] + "_seg" + ext
                         ),
                     )
+            elif isGAN:
+                output_prediction = aggregator.get_output_tensor()
+                output_prediction = output_prediction.unsqueeze(0)
+                label_ground_truth = label_ground_truth.unsqueeze(0)
+                
+                #temporary for chestxray
+                #img_o = image.unsqueeze(0) 
+
+                if params["save_output"]:
+                    path_to_metadata = subject["path_to_metadata"][0]
+                    
+                    inputImage = sitk.ReadImage(path_to_metadata)
+                    ext = get_filename_extension_sanitized(path_to_metadata)
+
+
+                    pred_mask = output_prediction.numpy()
+
+                    img_in = image.cpu().detach().numpy() 
+
+                    pred_mask=pred_mask[0][0]
+                    img_in = img_in[0][0]
+                    
+                    if params["model"]["architecture"] == "cycleGAN":
+                        pred_mask[pred_mask < -1] = -1
+                        img_in[img_in < -1] = -1
+                    else:
+                        pred_mask[pred_mask < 0 ] = 0
+                        img_in[img_in < 0] = 0
+ 
+                    result_array = np.swapaxes(pred_mask, 0, 2)
+                    img_arr = np.swapaxes(img_in, 0, 2)
+                    ## special case for 2D
+                    if image.shape[-1] > 1:
+                        # ITK expects array as Z,X,Y
+                        result_array = result_array
+                        img_arr = img_arr
+                    else:
+                        result_array = result_array.squeeze(0)
+                        img_arr = img_arr.squeeze(0)
+                        
+                    if (isinstance(result_array[0][0],np.float32) and ext in  [
+                        ".jpg",
+                        ".jpeg",
+                        ".png",
+                    ]):
+                        if params["model"]["architecture"] == "cycleGAN":
+                            result_array = (result_array + 1) / 2
+                        result_array = result_array*255
+                        result_array = result_array.astype(int)
+                        
+                        img_arr = img_arr.astype(int)
+                        
+                    result_image = sitk.GetImageFromArray(result_array)
+                    
+                    result_image.CopyInformation(inputImage)
+                    # cast as the same data type
+                    result_image = sitk.Cast(result_image, inputImage.GetPixelID())
+                    
+                    img_save = sitk.GetImageFromArray(img_arr)
+                    img_save.CopyInformation(inputImage)
+                    img_save = sitk.Cast(img_save, inputImage.GetPixelID())
+                    
+                    # this handles cases that need resampling/resizing
+                    #if "resample" in params["data_preprocessing"]:
+                    #    result_image = resample_image(
+                     #       result_image,
+                      #      inputImage.GetSpacing(),
+                       #     interpolator=sitk.sitkNearestNeighbor,
+                        #)
+                    if (isinstance(result_array[0][0],np.float32)):
+                        #special case for cycleGAN
+                        #if params["model"]["architecture"] == "cycleGAN":
+                         #   result_image = (result_image + 1) / 2
+                        #result_image = result_image*255
+                        sitk.WriteImage(
+                           result_image,
+                           os.path.join(
+                               current_output_dir, subject["subject_id"][0] + "_out" + ext
+                           ),
+                       )
+                        
+                    else:    
+                        sitk.WriteImage(
+                            result_image,
+                            os.path.join(
+                                current_output_dir, subject["subject_id"][0] + "_out" + ext
+                            ),
+                        )
+                        
+                        sitk.WriteImage(
+                            img_save,
+                            os.path.join(
+                                current_output_dir, subject["subject_id"][0] + "_input" + ext
+                            ),
+                        )
             else:
                 # final regression output
                 output_prediction = output_prediction / len(patch_loader)
@@ -404,45 +519,65 @@ def validate_network(
                 logits_list.append(output_prediction)
                 subject_id_list.append(subject.get("subject_id")[0])
 
+            try:
+                style_to_style = params["style_to_style"]
+                if style_to_style==False:
+                    style=False
+                else:
+                    style=True
+            except KeyError:
+                style=True
+            #Special case for GANs
+            if isGAN:     
+                if not style:
+                    label_ground_truth = model_main.preprocess(label_ground_truth)
+                else:
+                    _ , label_ground_truth = model_main.preprocess(label_ground_truth, label_ground_truth)
+
+                
             # we cast to float32 because float16 was causing nan
             if label_ground_truth is not None:
                 # this is for RGB label
                 if label_ground_truth.shape[0] == 3:
                     label_ground_truth = label_ground_truth[0, ...].unsqueeze(0)
                 # we always want the ground truth to be in the same format as the prediction
-                label_ground_truth = label_ground_truth.unsqueeze(0)
+                if not isGAN:
+                    label_ground_truth = label_ground_truth.unsqueeze(0)
                 if label_ground_truth.shape[-1] == 1:
                     label_ground_truth = label_ground_truth.squeeze(-1)
-                final_loss, final_metric = get_loss_and_metrics(
-                    image,
-                    label_ground_truth,
-                    output_prediction.to(torch.float32),
-                    params,
+            print(image.size())
+            print(label_ground_truth.size())
+            print(output_prediction.size())
+            final_loss, final_metric = get_loss_and_metrics_func(
+                image,
+                label_ground_truth,
+                output_prediction.to(torch.float32),
+                params,
+            )
+            if params["verbose"]:
+                print(
+                    "Full image " + mode + ":: Loss: ",
+                    final_loss,
+                    "; Metric: ",
+                    final_metric,
+                    flush=True,
                 )
-                if params["verbose"]:
-                    print(
-                        "Full image " + mode + ":: Loss: ",
-                        final_loss,
-                        "; Metric: ",
-                        final_metric,
-                        flush=True,
-                    )
 
-                # # Non network validing related
-                # loss.cpu().data.item()
-                total_epoch_valid_loss += final_loss.cpu().item()
-                for metric in final_metric.keys():
-                    if isinstance(total_epoch_valid_metric[metric], list):
-                        if len(total_epoch_valid_metric[metric]) == 0:
-                            total_epoch_valid_metric[metric] = np.array(
-                                final_metric[metric]
-                            )
-                        else:
-                            total_epoch_valid_metric[metric] += np.array(
-                                final_metric[metric]
-                            )
+            # # Non network validing related
+            # loss.cpu().data.item()
+            total_epoch_valid_loss += final_loss.cpu().item()
+            for metric in final_metric.keys():
+                if isinstance(total_epoch_valid_metric[metric], list):
+                    if len(total_epoch_valid_metric[metric]) == 0:
+                        total_epoch_valid_metric[metric] = np.array(
+                            final_metric[metric]
+                        )
                     else:
-                        total_epoch_valid_metric[metric] += final_metric[metric]
+                        total_epoch_valid_metric[metric] += np.array(
+                            final_metric[metric]
+                        )
+                else:
+                    total_epoch_valid_metric[metric] += final_metric[metric]
 
         if label_ground_truth is not None:
             if params["verbose"]:
@@ -496,16 +631,30 @@ def validate_network(
     else:
         average_epoch_valid_loss, average_epoch_valid_metric = 0, {}
 
-    if scheduler is not None:
-        if params["scheduler"]["type"] in [
-            "reduce_on_plateau",
-            "reduce-on-plateau",
-            "plateau",
-            "reduceonplateau",
-        ]:
-            scheduler.step(average_epoch_valid_loss)
-        else:
-            scheduler.step()
+        
+    if isinstance(scheduler, list):
+        for scheduler in scheduler:
+            if scheduler is not None:
+                if params["scheduler"]["type"] in [
+                    "reduce_on_plateau",
+                    "reduce-on-plateau",
+                    "plateau",
+                    "reduceonplateau",
+                ]:
+                    scheduler.step(average_epoch_valid_loss)
+                else:
+                    scheduler.step()
+    else:
+        if scheduler is not None:
+            if params["scheduler"]["type"] in [
+                "reduce_on_plateau",
+                "reduce-on-plateau",
+                "plateau",
+                "reduceonplateau",
+            ]:
+                scheduler.step(average_epoch_valid_loss)
+            else:
+                scheduler.step()
 
     # write the predictions, if appropriate
     if params["save_output"]:
